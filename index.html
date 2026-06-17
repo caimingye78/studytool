@@ -551,7 +551,7 @@ async function aiGGB(){
   }
 }
 
-/* ---------- 立体几何 3D 解题（AI 出结构化坐标 + 本地 Three.js 确定性渲染，参考 edulab 思路） ---------- */
+/* ---------- 立体几何 3D 解题（前端确定性坐标生成 + Three.js 渲染，参考 edulab geometry_kernel 思路） ---------- */
 let geoImg=null,lastGeoSpec=null,lastGeoSolution='',geoScene=null;
 function onGeoImg(inp){const f=inp.files[0];if(!f)return;const rd=new FileReader();rd.onload=e=>{geoImg=e.target.result;qs('#geoPrev').src=geoImg;qs('#geoPrev').style.display='block';};rd.readAsDataURL(f);}
 function geoLabel(txt){
@@ -633,59 +633,163 @@ function extractGeoJSON(t){
   return best;
 }
 
-/* 内置几何体坐标生成器（兜底：如果AI没给有效JSON，根据题目关键词自动生成） */
-const GEO_BODIES={
-  cube:function(a){a=a||2;return{
+/* ===== 几何体坐标 kernel（参考 edulab geometry_kernel.py，纯前端确定性计算） ===== */
+const GeoKernel={
+  // 正方体 ABCD-A1B1C1D1，A在原点，AB沿x，AD沿y，AA1沿z
+  cube:function(edge){const a=edge||2;return{
     points:{A:[0,0,0],B:[a,0,0],C:[a,a,0],D:[0,a,0],A1:[0,0,a],B1:[a,0,a],C1:[a,a,a],D1:[0,a,a]},
     edges:[['A','B'],['B','C'],['C','D'],['D','A'],['A1','B1'],['B1','C1'],['C1','D1'],['D1','A1'],['A','A1'],['B','B1'],['C','C1'],['D','D1']],
-    faces:[['A','B','C','D'],['A1','B1','C1','D1']],highlights:[]}},
-  cuboid:function(a,b,c){a=a||3;b=b||2;c=c||1;return{
+    faces:[['A','B','C','D'],['A1','B1','C1','D1'],['A','B','B1','A1'],['B','C','C1','B1'],['C','D','D1','C1'],['D','A','A1','D1']]}},
+  // 长方体，lx沿x(AB), ly沿y(AD), lz沿z(AA1)
+  cuboid:function(lx,ly,lz){const a=lx||3,b=ly||2,c=lz||1;return{
     points:{A:[0,0,0],B:[a,0,0],C:[a,b,0],D:[0,b,0],A1:[0,0,c],B1:[a,0,c],C1:[a,b,c],D1:[0,b,c]},
     edges:[['A','B'],['B','C'],['C','D'],['D','A'],['A1','B1'],['B1','C1'],['C1','D1'],['D1','A1'],['A','A1'],['B','B1'],['C','C1'],['D','D1']],
-    faces:[['A','B','C','D'],['A1','B1','C1','D1']],highlights:[]}},
-  pyramid4:function(a,h){a=a||2;h=h||3;const c=a/2;return{
-    points:{A:[0,0,0],B:[a,0,0],C:[a,a,0],D:[0,a,0],P:[c,c,h]},
+    faces:[['A','B','C','D'],['A1','B1','C1','D1'],['A','B','B1','A1'],['B','C','C1','B1'],['C','D','D1','C1'],['D','A','A1','D1']]}},
+  // 正四棱锥 P-ABCD，底面中心在原点投影下方，A在原点
+  pyramid4:function(baseEdge,height){const a=baseEdge||2,h=height||3;return{
+    points:{A:[0,0,0],B:[a,0,0],C:[a,a,0],D:[0,a,0],P:[a/2,a/2,h]},
     edges:[['A','B'],['B','C'],['C','D'],['D','A'],['A','P'],['B','P'],['C','P'],['D','P']],
-    faces:[['A','B','C','D']],highlights:[]}},
-  tetrahedron:function(a){a=a||2;const s=a*Math.sqrt(2)/2,h=a*Math.sqrt(2/3);return{
-    points:{A:[0,0,0],B:[a,0,0],C:[a/2,s,0],D:[a/2,s/3,h]},
+    faces:[['A','B','C','D'],['A','B','P'],['B','C','P'],['C','D','P'],['D','A','P']]}},
+  // 正三棱锥(正四面体) ABCD，底面ABC在z=0，D在上方
+  tetrahedron:function(edge){const a=edge||2;
+    const h=a*Math.sqrt(2/3); // 高
+    const r=a*Math.sqrt(3)/3; // 底面外接圆半径
+    return{
+    points:{A:[0,0,0],B:[a,0,0],C:[a/2,a*Math.sqrt(3)/2,0],D:[a/2,a*Math.sqrt(3)/6,h]},
     edges:[['A','B'],['B','C'],['C','A'],['A','D'],['B','D'],['C','D']],
-    faces:[['A','B','C']],highlights:[]}}
+    faces:[['A','B','C'],['A','B','D'],['B','C','D'],['C','A','D']]}},
+  // 正三棱柱 ABC-A1B1C1
+  prism3:function(baseEdge,height){const a=baseEdge||2,h=height||3;
+    const s3=a*Math.sqrt(3)/2;
+    return{
+    points:{A:[0,0,0],B:[a,0,0],C:[a/2,s3,0],A1:[0,0,h],B1:[a,0,h],C1:[a/2,s3,h]},
+    edges:[['A','B'],['B','C'],['C','A'],['A1','B1'],['B1','C1'],['C1','A1'],['A','A1'],['B','B1'],['C','C1']],
+    faces:[['A','B','C'],['A1','B1','C1'],['A','B','B1','A1'],['B','C','C1','B1'],['C','A','A1','C1']]}},
+  // 正六棱柱
+  prism6:function(baseEdge,height){const a=baseEdge||2,h=height||3;
+    const pts={},edges=[],s3=Math.sqrt(3);
+    const names=['A','B','C','D','E','F'];
+    const angles=[0,60,120,180,240,300];
+    for(let i=0;i<6;i++){
+      const rad=angles[i]*Math.PI/180;
+      pts[names[i]]=[a*Math.cos(rad),a*Math.sin(rad),0];
+      pts[names[i]+'1']=[a*Math.cos(rad),a*Math.sin(rad),h];
+    }
+    for(let i=0;i<6;i++){
+      edges.push([names[i],names[(i+1)%6]]);
+      edges.push([names[i]+'1',names[(i+1)%6]+'1']);
+      edges.push([names[i],names[i]+'1']);
+    }
+    return{points:pts,edges:edges,faces:[names,names.map(n=>n+'1')]};}
 };
-function fallbackGeoBody(text){
+/* 从题目文字中识别几何体类型和参数，调用 kernel 精确生成坐标 */
+function detectGeoBody(text){
   if(!text)return null;
-  if(/正方体|正四棱柱|cube/i.test(text)){
-    const m=text.match(/棱长[为是]?\s*(\d+)/);
-    return GEO_BODIES.cube(m?+m[1]:2);}
-  if(/长方体|直四棱柱|cuboid/i.test(text)){
-    return GEO_BODIES.cuboid(3,2,2);}
-  if(/正[三四]棱锥|pyramid/i.test(text)){
-    const m=text.match(/底面边长[为是]?\s*(\d+)/),mh=text.match(/高[为是]?\s*(\d+)/);
-    return GEO_BODIES.pyramid4(m?+m[1]:2,mh?+mh[1]:3);}
-  if(/正四面体|正三棱锥|tetrahedron/i.test(text)){
-    return GEO_BODIES.tetrahedron(2);}
-  // 默认正方体
-  if(/ABCD.*A1|A₁B₁C₁D₁/i.test(text))return GEO_BODIES.cube(2);
+  const t=text.replace(/[₁₂₃₄]/g,function(c){return{'\u2081':'1','\u2082':'2','\u2083':'3','\u2084':'4'}[c]||c;});
+  // 提取数值参数的辅助函数
+  function num(re){const m=t.match(re);return m?+m[1]:null;}
+  // 正方体
+  if(/正方体|正四棱柱/.test(t)||(/cube/i.test(t)&&!/cuboid/i.test(t))){
+    const edge=num(/棱长[为是=]?\s*(\d+\.?\d*)/)||num(/边长[为是=]?\s*(\d+\.?\d*)/)||2;
+    return GeoKernel.cube(edge);}
+  // 长方体
+  if(/长方体|直四棱柱|cuboid/i.test(t)){
+    const lx=num(/长[为是=]?\s*(\d+\.?\d*)/)||num(/AB\s*[=＝]\s*(\d+\.?\d*)/)||3;
+    const ly=num(/宽[为是=]?\s*(\d+\.?\d*)/)||num(/AD\s*[=＝]\s*(\d+\.?\d*)/)||2;
+    const lz=num(/高[为是=]?\s*(\d+\.?\d*)/)||num(/AA1\s*[=＝]\s*(\d+\.?\d*)/)||2;
+    return GeoKernel.cuboid(lx,ly,lz);}
+  // 正四棱锥
+  if(/正四棱锥|四棱锥/.test(t)){
+    const base=num(/底面边长[为是=]?\s*(\d+\.?\d*)/)||num(/底边[为是=]?\s*(\d+\.?\d*)/)||2;
+    const h=num(/高[为是=]?\s*(\d+\.?\d*)/)||num(/[Hh]\s*[=＝]\s*(\d+\.?\d*)/)||3;
+    return GeoKernel.pyramid4(base,h);}
+  // 正三棱锥/正四面体
+  if(/正四面体|正三棱锥|tetrahedron/i.test(t)){
+    const edge=num(/棱长[为是=]?\s*(\d+\.?\d*)/)||num(/边长[为是=]?\s*(\d+\.?\d*)/)||2;
+    return GeoKernel.tetrahedron(edge);}
+  // 正三棱柱
+  if(/正三棱柱|三棱柱/.test(t)){
+    const base=num(/底面边长[为是=]?\s*(\d+\.?\d*)/)||num(/底边[为是=]?\s*(\d+\.?\d*)/)||2;
+    const h=num(/高[为是=]?\s*(\d+\.?\d*)/)||num(/侧棱[为是=]?\s*(\d+\.?\d*)/)||3;
+    return GeoKernel.prism3(base,h);}
+  // 正六棱柱
+  if(/正六棱柱|六棱柱/.test(t)){
+    const base=num(/底面边长[为是=]?\s*(\d+\.?\d*)/)||2;
+    const h=num(/高[为是=]?\s*(\d+\.?\d*)/)||3;
+    return GeoKernel.prism6(base,h);}
+  // 通用 ABCD-A1B1C1D1 模式识别为正方体
+  if(/ABCD.*A1|A1B1C1D1/i.test(t)){
+    const edge=num(/棱长[为是=]?\s*(\d+\.?\d*)/)||num(/边长[为是=]?\s*(\d+\.?\d*)/)||2;
+    return GeoKernel.cube(edge);}
+  // 含棱锥关键词
+  if(/棱锥|pyramid/i.test(t)){
+    const base=num(/底面边长[为是=]?\s*(\d+\.?\d*)/)||2;
+    const h=num(/高[为是=]?\s*(\d+\.?\d*)/)||3;
+    return GeoKernel.pyramid4(base,h);}
   return null;
+}
+/* 保留旧版 fallbackGeoBody 作为额外兜底 */
+function fallbackGeoBody(text){return detectGeoBody(text);}
+/* 从AI解答中提取 HIGHLIGHT 行指定的关键线段 */
+function extractHighlights(resp,spec){
+  if(!resp||!spec||!spec.points)return[];
+  const hl=[];
+  // 匹配 HIGHLIGHT:A,C1 或 HIGHLIGHT: A, C1 等格式
+  const re=/HIGHLIGHT\s*[:：]\s*([A-Za-z0-9]+)\s*[,，]\s*([A-Za-z0-9]+)/gi;
+  let m;
+  while((m=re.exec(resp))){
+    const p1=m[1],p2=m[2];
+    if(spec.points[p1]&&spec.points[p2])hl.push([p1,p2]);
+  }
+  return hl;
 }
 async function solveGeo3D(){
   const txt=qs('#geoText').value.trim();
   if(!geoImg&&!txt){alert('请上传题目图片或输入题目文字');return;}
   initGeoScene();
-  const ask=`你是立体几何老师。${txt?'题目：'+txt:'图片中是一道立体几何题。'}请先给出极详细分步解答（每步标【第N步】说明依据的定理/公式，公式用LaTeX行内$...$，最后给最终答案），然后另起一行输出一个用于三维作图的 JSON（用三个反引号加 json 包裹）。坐标用题目的空间直角坐标系(x,y,z)，z 轴竖直向上。格式示例（正方体棱长2）：\n{"points":{"A":[0,0,0],"B":[2,0,0],"C":[2,2,0],"D":[0,2,0],"A1":[0,0,2],"B1":[2,0,2],"C1":[2,2,2],"D1":[0,2,2]},"edges":[["A","B"],["B","C"],["C","D"],["D","A"],["A1","B1"],["B1","C1"],["C1","D1"],["D1","A1"],["A","A1"],["B","B1"],["C","C1"],["D","D1"]],"highlights":[["A","C1"]],"faces":[["A","B","C","D"]]}\n说明：points 是所有关键点的精确坐标；edges 是几何体的全部棱；highlights 是题目所求的关键线段（如异面直线、对角线）；faces 可选，画半透明面。点名只用英文字母和数字（如 A B C D A1 P O M）。务必输出完整可解析的 JSON。`;
+  qs('#geoOut').innerHTML='<b>正在生成三维图形...</b>';
+  // 第一步：前端确定性生成几何体坐标
+  lastGeoSpec=detectGeoBody(txt);
+  // 第二步：如果成功识别，立即渲染3D图（不等AI）
+  if(lastGeoSpec&&lastGeoSpec.points){
+    lastGeoSpec.highlights=lastGeoSpec.highlights||[];
+    renderGeoSpec(lastGeoSpec);
+    const np=Object.keys(lastGeoSpec.points).length,ne=(lastGeoSpec.edges||[]).length;
+    qs('#geoOut').innerHTML='<b>🧊 已渲染三维图：'+np+' 个顶点、'+ne+' 条棱。可拖动旋转、滚轮缩放。</b><hr style="border:none;border-top:1px solid #2b3760;margin:8px 0"><i>AI 正在生成分步解答，请稍候...</i>';
+  }else{
+    qs('#geoOut').innerHTML='<b>正在等待 AI 识别几何体并解答...</b>';
+  }
+  // 第三步：调用AI获取分步解答（AI只负责讲解，不负责坐标）
+  const ask=geoImg
+    ?'你是立体几何老师。图片中是一道立体几何题。请给出极详细的分步解答（每步标【第N步】并说明依据的定理和公式，公式用LaTeX行内$...$格式，最后给出最终答案）。在解答末尾另起一行，用格式 HIGHLIGHT:点1,点2 指出题目所求的关键线段（如对角线、异面直线等），例如 HIGHLIGHT:A,C1。可以有多行HIGHLIGHT。不需要输出JSON坐标数据。'
+    :'你是立体几何老师。题目：'+txt+'\n请给出极详细的分步解答（每步标【第N步】并说明依据的定理和公式，公式用LaTeX行内$...$格式，最后给出最终答案）。在解答末尾另起一行，用格式 HIGHLIGHT:点1,点2 指出题目所求的关键线段（如对角线、异面直线等），例如 HIGHLIGHT:A,C1。可以有多行HIGHLIGHT。不需要输出JSON坐标数据。';
   let resp;
   if(geoImg) resp=await callAI([{role:'user',content:[{type:'image_url',image_url:{url:geoImg}},{type:'text',text:ask}]}],true,qs('#geoOut'));
   else resp=await callAI([{role:'user',content:ask}],false,qs('#geoOut'));
-  if(!resp)return;
-  lastGeoSpec=extractGeoJSON(resp);
-  // 兜底：如果AI没给出有效JSON，根据题目关键词自动生成几何体
-  if(!lastGeoSpec||!lastGeoSpec.points){
-    lastGeoSpec=fallbackGeoBody(txt||(resp.slice(0,300)));
+  if(!resp){
+    // AI调用失败但图已经渲染了，保留图
+    if(lastGeoSpec&&lastGeoSpec.points){drawGeo();}
+    return;
   }
-  const solTxt=resp.replace(/```json[\s\S]*?```/gi,'').replace(/```[\s\S]*?```/g,'');
-  lastGeoSolution=solTxt.replace(/[#*\\]/g,'').replace(/\n/g,'<br>').replace(/(<br>\s*){3,}/g,'<br><br>');
+  // 如果第一步没能识别几何体，尝试从AI回答中补救
+  if(!lastGeoSpec||!lastGeoSpec.points){
+    // 兜底1：尝试从AI回答提取JSON（保留旧逻辑作为额外兜底）
+    lastGeoSpec=extractGeoJSON(resp);
+    // 兜底2：用关键词从AI回答前几百字猜类型
+    if(!lastGeoSpec||!lastGeoSpec.points){
+      lastGeoSpec=detectGeoBody(resp.slice(0,500));
+    }
+  }
+  // 从AI解答中提取高亮线段
+  if(lastGeoSpec&&lastGeoSpec.points){
+    const hl=extractHighlights(resp,lastGeoSpec);
+    if(hl.length)lastGeoSpec.highlights=(lastGeoSpec.highlights||[]).concat(hl);
+  }
+  // 格式化解答文字
+  const solTxt=resp.replace(/```json[\s\S]*?```/gi,'').replace(/```[\s\S]*?```/g,'').replace(/HIGHLIGHT\s*[:：][^\n]*/gi,'');
+  lastGeoSolution=solTxt.replace(/[#*]/g,'').replace(/\n/g,'<br>').replace(/(<br>\s*){3,}/g,'<br><br>');
   drawGeo();
-  if(lastText)speak('解答完成，'+lastText.slice(0,200));
+  if(lastText)speak('解答完成');
 }
 function drawGeo(){
   let status,ok=false;
