@@ -3,17 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D 几何超级实验室 v5.0</title>
+    <title>3D 几何实验室 v6.1 - 拍照识题版</title>
     <style>
         body { margin: 0; background: #0f1424; color: white; font-family: sans-serif; overflow: hidden; }
         #ui { position: absolute; top: 10px; left: 10px; z-index: 1000; width: 320px; }
         .card { background: rgba(26, 33, 56, 0.95); border: 1px solid #33406e; border-radius: 12px; padding: 15px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
-        input { width: 100%; background: #0a0e1c; color: white; border: 1px solid #4f6ef7; padding: 10px; border-radius: 6px; box-sizing: border-box; }
-        button { background: linear-gradient(90deg, #4f6ef7, #9b59f7); color: white; border: none; padding: 12px; border-radius: 6px; cursor: pointer; width: 100%; font-weight: bold; margin-top: 10px; }
-        #out { font-size: 13px; line-height: 1.6; color: #cfd8f5; max-height: 450px; overflow-y: auto; margin-top: 12px; border-top: 1px solid #33406e; padding-top: 10px; }
-        .node-label { color: #7ee0a3; font-weight: bold; font-size: 15px; background: rgba(0,0,0,0.5); padding: 1px 4px; border-radius: 3px; pointer-events: none; }
-        .measure-tag { color: #f77; background: rgba(0,0,0,0.7); padding: 2px 5px; border-radius: 4px; font-size: 12px; font-weight: bold; }
-        hr { border: none; border-top: 1px solid #33406e; margin: 10px 0; }
+        textarea { width: 100%; background: #0a0e1c; color: white; border: 1px solid #33406e; padding: 10px; border-radius: 6px; box-sizing: border-box; font-size: 13px; }
+        .btn-group { display: flex; gap: 5px; margin-top: 10px; }
+        button { flex: 1; background: linear-gradient(90deg, #4f6ef7, #9b59f7); color: white; border: none; padding: 10px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 12px; }
+        button.sub { background: #2b3760; }
+        #preview-container { margin-top: 10px; display: none; text-align: center; }
+        #img-prev { max-width: 100%; border-radius: 6px; border: 1px solid #4f6ef7; }
+        #out { font-size: 13px; line-height: 1.6; color: #cfd8f5; max-height: 350px; overflow-y: auto; margin-top: 12px; border-top: 1px solid #33406e; padding-top: 10px; }
+        .node-label { color: #7ee0a3; font-weight: bold; font-size: 15px; pointer-events: none; }
+        .measure-tag { color: #f77; background: rgba(0,0,0,0.7); padding: 2px 5px; border-radius: 4px; font-size: 12px; }
     </style>
     <script>window.MathJax={tex:{inlineMath:[['$','$']]}};</script>
     <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
@@ -21,9 +24,14 @@
 <body>
     <div id="ui">
         <div class="card">
-            <input type="text" id="qIn" placeholder="输入题目，如：正方体棱长2，求AC1与底面的角" value="正方体ABCD-A1B1C1D1棱长2，求直线AC1与底面ABCD所成的角">
-            <button onclick="solve()">生成 3D 模型与精确解答</button>
-            <div id="out">等待输入... 支持圆柱/圆锥/多面体。</div>
+            <textarea id="qIn" rows="3" placeholder="手动输入题目，或点击下方拍照上传...">正方体ABCD-A1B1C1D1棱长2，求AC1的长度</textarea>
+            <div id="preview-container"><img id="img-prev"></div>
+            <div class="btn-group">
+                <button onclick="document.getElementById('fileIn').click()" class="sub">📷 拍照/上传</button>
+                <button onclick="solve(true)">🚀 智能解析</button>
+            </div>
+            <input type="file" id="fileIn" accept="image/*" hidden onchange="handleImg(this)">
+            <div id="out">就绪。支持拍照识别立体几何题并自动建模。</div>
         </div>
     </div>
     <div id="container"></div>
@@ -42,33 +50,17 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 
-/* --- 1. 数学内核 (保留并增强) --- */
-const V = (x,y,z) => new THREE.Vector3(x,y,z);
-const fmt = n => Number.isInteger(n) ? n : (Math.abs(n-Math.sqrt(Math.round(n*n))) < 0.01 ? `√${Math.round(n*n)}` : n.toFixed(2));
-
+/* --- 1. 核心 Kernel --- */
 const GeoKernel = {
-    cube: (a=2) => ({
-        points: { A:[0,0,0], B:[a,0,0], C:[a,a,0], D:[0,a,0], A1:[0,0,a], B1:[a,0,a], C1:[a,a,a], D1:[0,a,a] },
-        edges: [['A','B'],['B','C'],['C','D'],['D','A'],['A1','B1'],['B1','C1'],['C1','D1'],['D1','A1'],['A','A1'],['B','B1'],['C','C1'],['D','D1']],
-        faces: [['A','B','C','D']]
-    }),
-    pyramid: (a=2, h=3) => ({
-        points: { A:[-a/2,-a/2,0], B:[a/2,-a/2,0], C:[a/2,a/2,0], D:[-a/2,a/2,0], P:[0,0,h], O:[0,0,0] },
-        edges: [['A','B'],['B','C'],['C','D'],['D','A'],['A','P'],['B','P'],['C','P'],['D','P'],['P','O']],
-        faces: [['A','B','C','D']]
-    }),
-    cylinder: (r=1.5, h=3) => {
-        const pts = { O:[0,0,0], O1:[0,0,h], M:[r,0,0], N:[r,0,h] };
-        return { type:'cylinder', r, h, points: pts, edges:[['O','O1'],['M','N']] };
-    },
-    cone: (r=1.5, h=3) => {
-        const pts = { O:[0,0,0], P:[0,0,h], M:[r,0,0] };
-        return { type:'cone', r, h, points: pts, edges:[['O','P'],['O','M']] };
-    }
+    cube: (a=2) => ({ points: { A:[0,0,0], B:[a,0,0], C:[a,a,0], D:[0,a,0], A1:[0,0,a], B1:[a,0,a], C1:[a,a,a], D1:[0,a,a] }, edges: [['A','B'],['B','C'],['C','D'],['D','A'],['A1','B1'],['B1','C1'],['C1','D1'],['D1','A1'],['A','A1'],['B','B1'],['C','C1'],['D','D1']] }),
+    cylinder: (r=1.5, h=3) => ({ type:'cylinder', r, h, points: { O:[0,0,0], O1:[0,0,h] }, edges:[] }),
+    cone: (r=1.5, h=3) => ({ type:'cone', r, h, points: { O:[0,0,0], P:[0,0,h] }, edges:[] }),
+    pyramid: (a=2, h=3) => ({ points: { A:[-a/2,-a/2,0], B:[a/2,-a/2,0], C:[a/2,a/2,0], D:[-a/2,a/2,0], P:[0,0,h] }, edges: [['A','B'],['B','C'],['C','D'],['D','A'],['A','P'],['B','P'],['C','P'],['D','P']] })
 };
 
-/* --- 2. 初始化 3D 环境 --- */
+/* --- 2. 初始化 3D --- */
 let scene, camera, renderer, labelRenderer, controls, group;
+let currentBase64 = null;
 
 function init() {
     scene = new THREE.Scene(); scene.background = new THREE.Color(0x0a0e1c);
@@ -77,111 +69,106 @@ function init() {
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.getElementById('container').appendChild(renderer.domElement);
-    
     labelRenderer = new CSS2DRenderer();
     labelRenderer.setSize(window.innerWidth, window.innerHeight);
-    labelRenderer.domElement.style.position = 'absolute';
-    labelRenderer.domElement.style.top = '0';
-    labelRenderer.domElement.style.pointerEvents = 'none';
+    labelRenderer.domElement.style.position = 'absolute'; labelRenderer.domElement.style.top = '0';
     document.body.appendChild(labelRenderer.domElement);
-
     controls = new OrbitControls(camera, renderer.domElement);
     group = new THREE.Group(); scene.add(group);
-    
     scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-    const light = new THREE.DirectionalLight(0xffffff, 0.5);
-    light.position.set(5, 10, 7); scene.add(light);
-
-    window.addEventListener('resize', () => {
-        camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight); labelRenderer.setSize(window.innerWidth, window.innerHeight);
-    });
+    const light = new THREE.DirectionalLight(0xffffff, 0.5); light.position.set(5, 10, 7); scene.add(light);
     renderLoop();
 }
-
 function renderLoop() { requestAnimationFrame(renderLoop); renderer.render(scene, camera); labelRenderer.render(scene, camera); }
 
-/* --- 3. 核心计算与解答逻辑 --- */
-window.solve = async () => {
-    const input = document.getElementById('qIn').value;
+/* --- 3. 图片处理与识别 --- */
+window.handleImg = (inp) => {
+    const file = inp.files[0]; if(!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        currentBase64 = e.target.result;
+        document.getElementById('img-prev').src = currentBase64;
+        document.getElementById('preview-container').style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+};
+
+window.solve = async (useAI = true) => {
     const out = document.getElementById('out');
-    while(group.children.length > 0) group.remove(group.children[0]);
-
-    // 1. 模型识别
-    let spec;
-    if(/圆柱/.test(input)) spec = GeoKernel.cylinder();
-    else if(/圆锥/.test(input)) spec = GeoKernel.cone();
-    else if(/棱锥/.test(input)) spec = GeoKernel.pyramid();
-    else spec = GeoKernel.cube();
-
-    // 2. 坐标与标注
-    const vMap = {};
-    Object.keys(spec.points).forEach(k => {
-        const p = spec.points[k];
-        vMap[k] = V(p[0], p[2], p[1]);
-        const dot = new THREE.Mesh(new THREE.SphereGeometry(0.12), new THREE.MeshBasicMaterial({color: 0x7ee0a3}));
-        dot.position.copy(vMap[k]); group.add(dot);
-        const div = document.createElement('div'); div.className = 'node-label'; div.textContent = k;
-        const lbl = new CSS2DObject(div); lbl.position.set(vMap[k].x, vMap[k].y + 0.4, vMap[k].z);
-        group.add(lbl);
-    });
-
-    // 3. 画棱
-    const mat = new THREE.LineBasicMaterial({color: 0x33406e});
-    spec.edges.forEach(e => {
-        const g = new THREE.BufferGeometry().setFromPoints([vMap[e[0]], vMap[e[1]]]);
-        group.add(new THREE.Line(g, mat));
-    });
-
-    // 4. 曲面渲染
-    if(spec.type === 'cylinder') {
-        const m = new THREE.Mesh(new THREE.CylinderGeometry(spec.r, spec.r, spec.h, 32, 1, true), new THREE.MeshPhongMaterial({color:0x4f6ef7, transparent:true, opacity:0.2, side:THREE.DoubleSide}));
-        m.position.y = spec.h/2; group.add(m);
-    } else if(spec.type === 'cone') {
-        const m = new THREE.Mesh(new THREE.ConeGeometry(spec.r, spec.h, 32, 1, true), new THREE.MeshPhongMaterial({color:0x9b59f7, transparent:true, opacity:0.2, side:THREE.DoubleSide}));
-        m.position.y = spec.h/2; group.add(m);
-    }
-
-    // 5. 识别问题线段并高亮 (即刻生效)
-    let solveSteps = "<b>[本地精确计算结果]</b><br>";
-    const matches = input.match(/[A-Z][0-1]?[A-Z][0-1]?/g);
-    if(matches) {
-        matches.forEach(m => {
-            const p1 = m.substring(0, m.length/2), p2 = m.substring(m.length/2);
-            if(vMap[p1] && vMap[p2]) {
-                const g = new THREE.BufferGeometry().setFromPoints([vMap[p1], vMap[p2]]);
-                group.add(new THREE.Line(g, new THREE.LineBasicMaterial({color: 0xffa500, linewidth: 3})));
-                const d = vMap[p1].distanceTo(vMap[p2]).toFixed(2);
-                const tagDiv = document.createElement('div'); tagDiv.className = 'measure-tag'; tagDiv.textContent = `L=${d}`;
-                const tag = new CSS2DObject(tagDiv); tag.position.copy(vMap[p1].clone().lerp(vMap[p2], 0.5));
-                group.add(tag);
-            }
-        });
-    }
-
-    // 6. 生成解析文案 (本地 + AI)
-    out.innerHTML = "✅ 模型已生成，正在计算分步解析...";
+    const qIn = document.getElementById('qIn');
     const key = localStorage.getItem('zk');
-    if(!key) {
-        out.innerHTML += "<br>⚠️ 未检测到 API Key，无法生成详细文字步骤。";
-        return;
-    }
+    if(!key) return out.innerHTML = "⚠️ 请先在主站设置 API Key";
+    
+    out.innerHTML = "正在深度解析中，请稍候...";
+    let problemText = qIn.value;
 
     try {
+        // A. 如果有图片，先进行 OCR 识别
+        if(currentBase64) {
+            out.innerHTML = "📷 正在识别图片内容...";
+            const visionResp = await fetch("https://open.bigmodel.cn/api/paas/v4/chat/completions", {
+                method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
+                body: JSON.stringify({
+                    model: "glm-4v-flash",
+                    messages: [{
+                        role: "user", 
+                        content: [
+                            { type: "text", text: "请完整提取这张图片里的立体几何题目文字。只返回文字内容。" },
+                            { type: "image_url", image_url: { url: currentBase64 } }
+                        ]
+                    }]
+                })
+            });
+            const vData = await visionResp.json();
+            problemText = vData.choices[0].message.content;
+            qIn.value = problemText; // 回显到文本框
+        }
+
+        // B. 画图逻辑 (同步)
+        while(group.children.length > 0) group.remove(group.children[0]);
+        let spec = /圆柱/.test(problemText) ? GeoKernel.cylinder() : 
+                   (/圆锥/.test(problemText) ? GeoKernel.cone() : 
+                   (/棱锥/.test(problemText) ? GeoKernel.pyramid() : GeoKernel.cube()));
+        
+        const vMap = {};
+        Object.keys(spec.points).forEach(k => {
+            const p = spec.points[k]; vMap[k] = new THREE.Vector3(p[0], p[2], p[1]);
+            const dot = new THREE.Mesh(new THREE.SphereGeometry(0.12), new THREE.MeshBasicMaterial({color: 0x7ee0a3}));
+            dot.position.copy(vMap[k]); group.add(dot);
+            const div = document.createElement('div'); div.className = 'node-label'; div.textContent = k;
+            const lbl = new CSS2DObject(div); lbl.position.set(vMap[k].x, vMap[k].y + 0.4, vMap[k].z);
+            group.add(lbl);
+        });
+        
+        const lineMat = new THREE.LineBasicMaterial({color: 0x33406e});
+        if(spec.edges) spec.edges.forEach(e => {
+            const g = new THREE.BufferGeometry().setFromPoints([vMap[e[0]], vMap[e[1]]]);
+            group.add(new THREE.Line(g, lineMat));
+        });
+
+        if(spec.type === 'cylinder' || spec.type === 'cone') {
+            const geo = spec.type === 'cylinder' ? new THREE.CylinderGeometry(spec.r, spec.r, spec.h, 32) : new THREE.ConeGeometry(spec.r, spec.h, 32);
+            const mesh = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({color: 0x4f6ef7, transparent: true, opacity: 0.3}));
+            mesh.position.y = spec.h/2; group.add(mesh);
+        }
+
+        // C. AI 解答
+        out.innerHTML = "✅ 模型已生成，正在计算详细步骤...";
         const resp = await fetch("https://open.bigmodel.cn/api/paas/v4/chat/completions", {
             method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
             body: JSON.stringify({
                 model: "glm-4-flash",
-                messages: [{role: "user", content: `你是一位顶级立体几何老师。请针对题目「${input}」给出极其清晰的解题过程。要求：1.建立空间直角坐标系 2.列出各点坐标 3.使用向量积公式求角或距离 4.最后给出结论。使用LaTeX标注公式。`}]
+                messages: [{role: "user", content: `你是一位顶级立体几何老师。请详细解答：${problemText}。要求：1.建立坐标系 2.给出计算过程 3.使用LaTeX。`}]
             })
         });
         const data = await resp.json();
         out.innerHTML = "<b>分步解析：</b><br>" + data.choices[0].message.content.replace(/\n/g, "<br>");
         if(window.MathJax) MathJax.typesetPromise();
+        
     } catch(e) {
-        out.innerHTML = "本地计算完成，AI 步骤加载失败。";
+        out.innerHTML = "❌ 操作失败: " + e.message;
     }
-}
+};
 
 init();
 </script>
