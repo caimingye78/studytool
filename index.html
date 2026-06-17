@@ -174,20 +174,10 @@ img.preview{max-width:100%;border-radius:10px;margin-top:8px}
 </section>
 
 <section id="geo3d" class="page">
-<div class="card"><h2>🧊 立体几何 3D 解题（上传题目 → 自动生成可旋转三维图 + 分步讲解）</h2>
-<div class="row">
-<button class="act" onclick="qs('#geoFile').click()">🖼 上传题目图片</button>
-<input type="file" id="geoFile" accept="image/*" hidden onchange="onGeoImg(this)">
-<button class="sub" onclick="qs('#geoText').value='';geoImg=null;qs('#geoPrev').style.display='none'">清空</button>
-</div>
-<textarea id="geoText" placeholder="也可直接输入题目文字，如：正方体ABCD-A1B1C1D1棱长为2，求异面直线AC与BD1所成的角…" style="width:100%;min-height:80px"></textarea>
-<img id="geoPrev" class="preview" style="display:none">
-<div class="row"><button class="act" onclick="solveGeo3D()">🚀 生成3D图 + 分步解答</button>
-<button class="sub" onclick="speak(lastText)">🔊 朗读</button>
-<button class="sub" onclick="reGeo3D()">🔄 仅重画3D图</button></div>
-<canvas id="tgeo" class="sim" width="900" height="460" style="margin-top:8px"></canvas>
-<p class="hint">采用「AI 出结构化坐标数据 + 本地 Three.js 确定性渲染」方案（参考 edulab 思路），三维图一定画得出来。可手指拖动旋转、滚轮/双指缩放。蓝色为几何体的棱，橙色高亮为题目所求的关键线段，配合下方分步解答理解。</p>
-<div class="out" id="geoOut">支持正方体、长方体、棱锥、棱柱等立体几何题：AI 给出精确坐标，自动画出几何体与所求线段，并给出每一步依据。</div>
+<div class="card"><h2>🧊 立体几何 3D 解题（照搬 edulab：可旋转三维图 + 数据标注 + 辅助线 + 分步解析）</h2>
+<p class="hint">在下方画面里输入题目（如「正方体ABCD-A1B1C1D1棱长2，求直线A1C与底面ABCD所成角」），点「解答」即生成带字母/边长/角度/距离标注的交互三维图与分步精确解答。支持线面角、二面角、异面直线夹角、点到平面距离、体积。</p>
+<p class="hint"><a href="geo.html" target="_blank" style="color:#8fa6ff">↗ 在新标签页全屏打开</a></p>
+<iframe src="geo.html" style="width:100%;height:82vh;border:none;border-radius:12px;background:#fff"></iframe>
 </div>
 </section>
 
@@ -295,7 +285,7 @@ const qs=s=>document.querySelector(s);
 let lastText="",lastQuestion="",lastPhotoProblem="";
 
 /* ---------- 导航 ---------- */
-function go(id,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('show'));qs('#'+id).classList.add('show');document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));btn.classList.add('active');if(id==='lab3d')init3D();if(id==='mathlab')drawFx();if(id==='study')renderWrong();if(id==='geo3d')initGeoScene();}
+function go(id,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('show'));qs('#'+id).classList.add('show');document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));btn.classList.add('active');if(id==='lab3d')init3D();if(id==='mathlab')drawFx();if(id==='study')renderWrong();}
 
 /* ---------- 通用 API ---------- */
 const PRESETS={
