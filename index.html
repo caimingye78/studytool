@@ -185,9 +185,9 @@ img.preview{max-width:100%;border-radius:10px;margin-top:8px}
 <div class="row"><button class="act" onclick="solveGeo3D()">🚀 生成3D图 + 分步解答</button>
 <button class="sub" onclick="speak(lastText)">🔊 朗读</button>
 <button class="sub" onclick="reGeo3D()">🔄 仅重画3D图</button></div>
-<div id="ggb3dDiv" style="background:#fff;border-radius:10px;min-height:420px;margin-top:8px"></div>
-<p class="hint">复用已加载的 GeoGebra（3D 模式），无需其他框架。三维图可手指拖动旋转、缩放；AI 自动建系、定点、连线画出几何体，配合下方分步解答理解。</p>
-<div class="out" id="geoOut">支持正方体、长方体、棱锥、棱柱、球等立体几何题：自动建系、定点、连线，并给出每一步依据。</div>
+<canvas id="tgeo" class="sim" width="900" height="460" style="margin-top:8px"></canvas>
+<p class="hint">采用「AI 出结构化坐标数据 + 本地 Three.js 确定性渲染」方案（参考 edulab 思路），三维图一定画得出来。可手指拖动旋转、滚轮/双指缩放。蓝色为几何体的棱，橙色高亮为题目所求的关键线段，配合下方分步解答理解。</p>
+<div class="out" id="geoOut">支持正方体、长方体、棱锥、棱柱等立体几何题：AI 给出精确坐标，自动画出几何体与所求线段，并给出每一步依据。</div>
 </div>
 </section>
 
@@ -295,7 +295,7 @@ const qs=s=>document.querySelector(s);
 let lastText="",lastQuestion="",lastPhotoProblem="";
 
 /* ---------- 导航 ---------- */
-function go(id,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('show'));qs('#'+id).classList.add('show');document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));btn.classList.add('active');if(id==='lab3d')init3D();if(id==='mathlab')drawFx();if(id==='study')renderWrong();if(id==='geo3d')loadGGB3D();}
+function go(id,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('show'));qs('#'+id).classList.add('show');document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));btn.classList.add('active');if(id==='lab3d')init3D();if(id==='mathlab')drawFx();if(id==='study')renderWrong();if(id==='geo3d')initGeoScene();}
 
 /* ---------- 通用 API ---------- */
 const PRESETS={
@@ -551,47 +551,96 @@ async function aiGGB(){
   }
 }
 
-/* ---------- 立体几何 3D 解题（复用 GeoGebra 3D） ---------- */
-let geoImg=null,ggb3dReady=false,lastGeoCmds=[];
+/* ---------- 立体几何 3D 解题（AI 出结构化坐标 + 本地 Three.js 确定性渲染，参考 edulab 思路） ---------- */
+let geoImg=null,lastGeoSpec=null,lastGeoSolution='',geoScene=null;
 function onGeoImg(inp){const f=inp.files[0];if(!f)return;const rd=new FileReader();rd.onload=e=>{geoImg=e.target.result;qs('#geoPrev').src=geoImg;qs('#geoPrev').style.display='block';};rd.readAsDataURL(f);}
-function loadGGB3D(cb){
-  if(!window.GGBApplet){qs('#geoOut').textContent='⚠️ GeoGebra 库加载中，稍等几秒再试';return;}
-  if(ggb3dReady&&window.ggb3dApplet){cb&&cb();return;}
-  qs('#ggb3dDiv').innerHTML='';
-  const w=Math.min(910,qs('#ggb3dDiv').clientWidth||910);
-  const app=new GGBApplet({appName:'3d',id:'ggb3dApplet',width:w,height:420,language:'zh-CN',showToolBar:false,showAlgebraInput:false,showMenuBar:false,appletOnLoad:function(){ggb3dReady=true;cb&&cb();}},true);
-  app.inject('ggb3dDiv');
+function geoLabel(txt){
+  const c=document.createElement('canvas');c.width=128;c.height=64;const x=c.getContext('2d');
+  x.fillStyle='#11206b';x.font='bold 46px sans-serif';x.textAlign='center';x.textBaseline='middle';x.fillText(txt,64,34);
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),depthTest:false}));
+  sp.scale.set(1.7,0.85,1);return sp;
 }
-function runGeo(cmds){
-  if(!ggb3dReady||!window.ggb3dApplet)return;
-  try{ggb3dApplet.reset();}catch(e){}
-  cmds.forEach(c=>{c=c.trim();if(c)try{ggb3dApplet.evalCommand(c);}catch(e){}});
+function initGeoScene(){
+  if(geoScene)return geoScene;
+  if(!window.THREE){qs('#geoOut').textContent='⚠️ 3D 库加载中，请稍等几秒再点一次此页';return null;}
+  const cv=qs('#tgeo');
+  const R=new THREE.WebGLRenderer({canvas:cv,antialias:true});R.setClearColor(0xf4f7ff,1);
+  const sc=new THREE.Scene();
+  const cam=new THREE.PerspectiveCamera(50,cv.width/cv.height,0.1,5000);
+  sc.add(new THREE.AmbientLight(0xffffff,0.9));
+  const dl=new THREE.DirectionalLight(0xffffff,0.45);dl.position.set(20,30,20);sc.add(dl);
+  const grp=new THREE.Group();sc.add(grp);
+  let az=0.7,pol=1.05,dist=26;const target=new THREE.Vector3();
+  function setCam(){cam.position.set(target.x+dist*Math.sin(pol)*Math.cos(az),target.y+dist*Math.cos(pol),target.z+dist*Math.sin(pol)*Math.sin(az));cam.lookAt(target);}
+  dragRotate(cv,(dx,dy)=>{az+=dx*0.01;pol=Math.min(2.9,Math.max(0.25,pol-dy*0.01));setCam();});
+  cv.addEventListener('wheel',e=>{e.preventDefault();dist=Math.min(120,Math.max(6,dist*(e.deltaY>0?1.1:0.9)));setCam();},{passive:false});
+  geoScene={R,sc,cam,grp,setDist:d=>{dist=d;},setCam};
+  (function render(){if(qs('#geo3d').classList.contains('show'))R.render(sc,cam);requestAnimationFrame(render);})();
+  setCam();
+  return geoScene;
 }
-function parseGeoCmds(t){
-  const m=t.split(/===\s*GGB\s*===/i);
-  const block=m.length>1?m[1]:t;
-  return block.replace(/```[a-z]*\n?/gi,'').split('\n').map(l=>l.trim()).filter(l=>l&&!/^[#\u4e00-\u9fa5]/.test(l)&&/[=(]/.test(l));
+function addTube(grp,a,b,color){
+  const dir=new THREE.Vector3().subVectors(b,a),len=dir.length();if(!len)return;
+  const cyl=new THREE.Mesh(new THREE.CylinderGeometry(0.09,0.09,len,12),new THREE.MeshBasicMaterial({color}));
+  cyl.position.copy(a).add(b).multiplyScalar(0.5);
+  cyl.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),dir.normalize());
+  grp.add(cyl);
+}
+function renderGeoSpec(spec){
+  const g=initGeoScene();if(!g)return false;
+  while(g.grp.children.length)g.grp.remove(g.grp.children[0]);
+  if(!spec||!spec.points)return false;
+  const names=Object.keys(spec.points);if(!names.length)return false;
+  const V={};names.forEach(n=>{const p=spec.points[n];if(Array.isArray(p)&&p.length>=3)V[n]=new THREE.Vector3(+p[0],+p[2],+p[1]);}); // 数学(x,y,z) z轴竖直 → Three.js y轴竖直
+  const valid=Object.keys(V);if(!valid.length)return false;
+  const box=new THREE.Box3();valid.forEach(n=>box.expandByPoint(V[n]));
+  const ctr=box.getCenter(new THREE.Vector3()),size=box.getSize(new THREE.Vector3());
+  const maxd=Math.max(size.x,size.y,size.z)||1,s=10/maxd;
+  valid.forEach(n=>{V[n].sub(ctr).multiplyScalar(s);});
+  g.setDist(26);g.setCam();
+  const pm=new THREE.MeshBasicMaterial({color:0x1a3acc});
+  valid.forEach(n=>{
+    const m=new THREE.Mesh(new THREE.SphereGeometry(0.17,12,12),pm);m.position.copy(V[n]);g.grp.add(m);
+    const lb=geoLabel(n);lb.position.copy(V[n]).add(new THREE.Vector3(0,0.7,0));g.grp.add(lb);});
+  (spec.faces||[]).forEach(f=>{const pts=(f||[]).map(n=>V[n]).filter(Boolean);if(pts.length<3)return;
+    const pos=[];for(let i=1;i<pts.length-1;i++)pos.push(pts[0].x,pts[0].y,pts[0].z,pts[i].x,pts[i].y,pts[i].z,pts[i+1].x,pts[i+1].y,pts[i+1].z);
+    const gm=new THREE.BufferGeometry();gm.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));gm.computeVertexNormals();
+    g.grp.add(new THREE.Mesh(gm,new THREE.MeshBasicMaterial({color:0x6c84ff,transparent:true,opacity:0.16,side:THREE.DoubleSide})));});
+  (spec.edges||[]).forEach(e=>{const a=V[e[0]],b=V[e[1]];if(a&&b)g.grp.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([a,b]),new THREE.LineBasicMaterial({color:0x33508c})));});
+  (spec.highlights||[]).forEach(e=>{const a=V[e[0]],b=V[e[1]];if(a&&b)addTube(g.grp,a,b,0xff7a1a);});
+  return true;
+}
+function extractGeoJSON(t){
+  const i=t.indexOf('{');if(i<0)return null;
+  let depth=0;
+  for(let j=i;j<t.length;j++){if(t[j]==='{')depth++;else if(t[j]==='}'){depth--;if(depth===0){try{return JSON.parse(t.slice(i,j+1));}catch(e){return null;}}}}
+  return null;
 }
 async function solveGeo3D(){
   const txt=qs('#geoText').value.trim();
   if(!geoImg&&!txt){alert('请上传题目图片或输入题目文字');return;}
-  loadGGB3D();
-  const ask=`你是立体几何老师。${txt?'题目：'+txt:'图片中是一道立体几何题。'}请完成两部分，中间用单独一行"===GGB==="分隔：\n第一部分（分隔线之前）：完整转写题目（若来自图片）并给出极详细分步解答，每步标【第N步】并说明依据的定理/公式，公式用LaTeX行内$...$，最后给出最终答案。\n第二部分（分隔线之后）：仅输出 GeoGebra 3D 作图指令，每行一条，禁止任何解释文字与markdown标记。要求：建立合适的空间直角坐标，用形如 A=(x,y,z) 定义关键点，用 Polygon/Segment/Prism/Pyramid/Sphere/Line 等英文命令画出题目几何体以及所求的关键线段/角，命令名一律用英文。`;
+  initGeoScene();
+  const ask=`你是立体几何老师。${txt?'题目：'+txt:'图片中是一道立体几何题。'}请先给出极详细分步解答（每步标【第N步】说明依据的定理/公式，公式用LaTeX行内$...$，最后给最终答案），然后另起一行输出一个用于三维作图的 JSON（用三个反引号加 json 包裹）。坐标用题目的空间直角坐标系(x,y,z)，z 轴竖直向上。格式示例（正方体棱长2）：\n{"points":{"A":[0,0,0],"B":[2,0,0],"C":[2,2,0],"D":[0,2,0],"A1":[0,0,2],"B1":[2,0,2],"C1":[2,2,2],"D1":[0,2,2]},"edges":[["A","B"],["B","C"],["C","D"],["D","A"],["A1","B1"],["B1","C1"],["C1","D1"],["D1","A1"],["A","A1"],["B","B1"],["C","C1"],["D","D1"]],"highlights":[["A","C1"]],"faces":[["A","B","C","D"]]}\n说明：points 是所有关键点的精确坐标；edges 是几何体的全部棱；highlights 是题目所求的关键线段（如异面直线、对角线）；faces 可选，画半透明面。点名只用英文字母和数字（如 A B C D A1 P O M）。务必输出完整可解析的 JSON。`;
   let resp;
-  if(geoImg){
-    resp=await callAI([{role:'user',content:[{type:'image_url',image_url:{url:geoImg}},{type:'text',text:ask}]}],true,qs('#geoOut'));
-  }else{
-    resp=await callAI([{role:'user',content:ask}],false,qs('#geoOut'));
-  }
+  if(geoImg) resp=await callAI([{role:'user',content:[{type:'image_url',image_url:{url:geoImg}},{type:'text',text:ask}]}],true,qs('#geoOut'));
+  else resp=await callAI([{role:'user',content:ask}],false,qs('#geoOut'));
   if(!resp)return;
-  const parts=resp.split(/===\s*GGB\s*===/i);
-  qs('#geoOut').innerHTML=(parts[0]||resp).replace(/[#*\\]/g,'').replace(/\n/g,'<br>');
-  if(window.MathJax&&MathJax.typesetPromise)MathJax.typesetPromise([qs('#geoOut')]);
-  lastGeoCmds=parseGeoCmds(resp);
-  let n=0;const tm=setInterval(()=>{n++;if(ggb3dReady){clearInterval(tm);runGeo(lastGeoCmds);}else if(n>40)clearInterval(tm);},500);
+  lastGeoSpec=extractGeoJSON(resp);
+  const solTxt=resp.replace(/```json[\s\S]*?```/gi,'').replace(/```[\s\S]*?```/g,'').replace(/\{[\s\S]*\}/,'');
+  lastGeoSolution=solTxt.replace(/[#*\\]/g,'').replace(/\n/g,'<br>').replace(/(<br>\s*){3,}/g,'<br><br>');
+  drawGeo();
   if(lastText)speak('解答完成，'+lastText.slice(0,200));
 }
-function reGeo3D(){if(!lastGeoCmds.length){alert('请先点「生成3D图 + 分步解答」一次');return;}loadGGB3D(()=>runGeo(lastGeoCmds));}
+function drawGeo(){
+  let status,ok=false;
+  try{ok=renderGeoSpec(lastGeoSpec);}catch(e){ok=false;}
+  if(ok){const np=Object.keys(lastGeoSpec.points).length,ne=(lastGeoSpec.edges||[]).length,nh=(lastGeoSpec.highlights||[]).length;
+    status=`🧊 已渲染三维图：${np} 个顶点、${ne} 条棱`+(nh?`、${nh} 条橙色高亮线段`:'')+'。可拖动旋转、滚轮/双指缩放。';}
+  else status='⚠️ 这次没拿到有效的三维坐标数据。可点「🔄 仅重画3D图」重试，或把题目说得更具体（如"正方体ABCD-A1B1C1D1棱长2，求AC与BD1所成角"）。';
+  qs('#geoOut').innerHTML='<b>'+status+'</b><hr style="border:none;border-top:1px solid #2b3760;margin:8px 0">'+lastGeoSolution;
+  if(window.MathJax&&MathJax.typesetPromise)MathJax.typesetPromise([qs('#geoOut')]);
+}
+function reGeo3D(){if(!lastGeoSpec){alert('请先点「生成3D图 + 分步解答」一次');return;}drawGeo();}
 
 /* ---------- 2D 物理动画 ---------- */
 const c1=qs('#c1'),x1=c1.getContext('2d');let projs=[];
