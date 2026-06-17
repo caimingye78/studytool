@@ -611,9 +611,61 @@ function renderGeoSpec(spec){
   return true;
 }
 function extractGeoJSON(t){
-  const i=t.indexOf('{');if(i<0)return null;
-  let depth=0;
-  for(let j=i;j<t.length;j++){if(t[j]==='{')depth++;else if(t[j]==='}'){depth--;if(depth===0){try{return JSON.parse(t.slice(i,j+1));}catch(e){return null;}}}}
+  // 优先从 ```json...``` 代码块提取
+  const codeBlock=t.match(/```json\s*([\s\S]*?)```/i);
+  if(codeBlock){try{return JSON.parse(codeBlock[1].trim());}catch(e){}}
+  // 其次找最后一个看起来像 {"points": 的大 JSON
+  const re=/\{[^{}]*"points"\s*:\s*\{[\s\S]*?\}\s*\}/g;
+  let m,last=null;
+  while((m=re.exec(t)))last=m[0];
+  if(last){try{return JSON.parse(last);}catch(e){
+    // 尝试修复常见问题：末尾多余逗号
+    try{return JSON.parse(last.replace(/,\s*([\]}])/g,'$1'));}catch(e2){}
+  }}
+  // 最后尝试暴力匹配最大的 JSON 块
+  let best=null,bl=0;
+  for(let i=0;i<t.length;i++){
+    if(t[i]!=='{')continue;
+    let d=0;
+    for(let j=i;j<t.length;j++){
+      if(t[j]==='{')d++;else if(t[j]==='}'){d--;if(d===0){
+        if(j-i>bl){const s=t.slice(i,j+1);try{const o=JSON.parse(s);if(o.points){best=o;bl=j-i;}}catch(e){}}break;}}}}
+  return best;
+}
+
+/* 内置几何体坐标生成器（兜底：如果AI没给有效JSON，根据题目关键词自动生成） */
+const GEO_BODIES={
+  cube:function(a){a=a||2;return{
+    points:{A:[0,0,0],B:[a,0,0],C:[a,a,0],D:[0,a,0],A1:[0,0,a],B1:[a,0,a],C1:[a,a,a],D1:[0,a,a]},
+    edges:[['A','B'],['B','C'],['C','D'],['D','A'],['A1','B1'],['B1','C1'],['C1','D1'],['D1','A1'],['A','A1'],['B','B1'],['C','C1'],['D','D1']],
+    faces:[['A','B','C','D'],['A1','B1','C1','D1']],highlights:[]}},
+  cuboid:function(a,b,c){a=a||3;b=b||2;c=c||1;return{
+    points:{A:[0,0,0],B:[a,0,0],C:[a,b,0],D:[0,b,0],A1:[0,0,c],B1:[a,0,c],C1:[a,b,c],D1:[0,b,c]},
+    edges:[['A','B'],['B','C'],['C','D'],['D','A'],['A1','B1'],['B1','C1'],['C1','D1'],['D1','A1'],['A','A1'],['B','B1'],['C','C1'],['D','D1']],
+    faces:[['A','B','C','D'],['A1','B1','C1','D1']],highlights:[]}},
+  pyramid4:function(a,h){a=a||2;h=h||3;const c=a/2;return{
+    points:{A:[0,0,0],B:[a,0,0],C:[a,a,0],D:[0,a,0],P:[c,c,h]},
+    edges:[['A','B'],['B','C'],['C','D'],['D','A'],['A','P'],['B','P'],['C','P'],['D','P']],
+    faces:[['A','B','C','D']],highlights:[]}},
+  tetrahedron:function(a){a=a||2;const s=a*Math.sqrt(2)/2,h=a*Math.sqrt(2/3);return{
+    points:{A:[0,0,0],B:[a,0,0],C:[a/2,s,0],D:[a/2,s/3,h]},
+    edges:[['A','B'],['B','C'],['C','A'],['A','D'],['B','D'],['C','D']],
+    faces:[['A','B','C']],highlights:[]}}
+};
+function fallbackGeoBody(text){
+  if(!text)return null;
+  if(/正方体|正四棱柱|cube/i.test(text)){
+    const m=text.match(/棱长[为是]?\s*(\d+)/);
+    return GEO_BODIES.cube(m?+m[1]:2);}
+  if(/长方体|直四棱柱|cuboid/i.test(text)){
+    return GEO_BODIES.cuboid(3,2,2);}
+  if(/正[三四]棱锥|pyramid/i.test(text)){
+    const m=text.match(/底面边长[为是]?\s*(\d+)/),mh=text.match(/高[为是]?\s*(\d+)/);
+    return GEO_BODIES.pyramid4(m?+m[1]:2,mh?+mh[1]:3);}
+  if(/正四面体|正三棱锥|tetrahedron/i.test(text)){
+    return GEO_BODIES.tetrahedron(2);}
+  // 默认正方体
+  if(/ABCD.*A1|A₁B₁C₁D₁/i.test(text))return GEO_BODIES.cube(2);
   return null;
 }
 async function solveGeo3D(){
@@ -626,7 +678,11 @@ async function solveGeo3D(){
   else resp=await callAI([{role:'user',content:ask}],false,qs('#geoOut'));
   if(!resp)return;
   lastGeoSpec=extractGeoJSON(resp);
-  const solTxt=resp.replace(/```json[\s\S]*?```/gi,'').replace(/```[\s\S]*?```/g,'').replace(/\{[\s\S]*\}/,'');
+  // 兜底：如果AI没给出有效JSON，根据题目关键词自动生成几何体
+  if(!lastGeoSpec||!lastGeoSpec.points){
+    lastGeoSpec=fallbackGeoBody(txt||(resp.slice(0,300)));
+  }
+  const solTxt=resp.replace(/```json[\s\S]*?```/gi,'').replace(/```[\s\S]*?```/g,'');
   lastGeoSolution=solTxt.replace(/[#*\\]/g,'').replace(/\n/g,'<br>').replace(/(<br>\s*){3,}/g,'<br><br>');
   drawGeo();
   if(lastText)speak('解答完成，'+lastText.slice(0,200));
@@ -636,7 +692,7 @@ function drawGeo(){
   try{ok=renderGeoSpec(lastGeoSpec);}catch(e){ok=false;}
   if(ok){const np=Object.keys(lastGeoSpec.points).length,ne=(lastGeoSpec.edges||[]).length,nh=(lastGeoSpec.highlights||[]).length;
     status=`🧊 已渲染三维图：${np} 个顶点、${ne} 条棱`+(nh?`、${nh} 条橙色高亮线段`:'')+'。可拖动旋转、滚轮/双指缩放。';}
-  else status='⚠️ 这次没拿到有效的三维坐标数据。可点「🔄 仅重画3D图」重试，或把题目说得更具体（如"正方体ABCD-A1B1C1D1棱长2，求AC与BD1所成角"）。';
+  else status='⚠️ 这次没拿到有效的三维坐标数据（模型未输出正确JSON，也无法识别几何体类型）。请重试或把题目说得更具体（如"正方体ABCD-A1B1C1D1棱长2，求AC与BD1所成角"）。';
   qs('#geoOut').innerHTML='<b>'+status+'</b><hr style="border:none;border-top:1px solid #2b3760;margin:8px 0">'+lastGeoSolution;
   if(window.MathJax&&MathJax.typesetPromise)MathJax.typesetPromise([qs('#geoOut')]);
 }
