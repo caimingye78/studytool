@@ -586,17 +586,28 @@ function addTube(grp,a,b,color){
   cyl.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),dir.normalize());
   grp.add(cyl);
 }
+function geoLabel2(txt,color){
+  const c=document.createElement('canvas');const w=Math.max(72,txt.length*22+24);c.width=w;c.height=56;
+  const x=c.getContext('2d');x.font='bold 32px sans-serif';x.textAlign='center';x.textBaseline='middle';
+  x.fillStyle='rgba(255,255,255,0.85)';x.beginPath();x.roundRect?x.roundRect(0,0,w,56,10):x.rect(0,0,w,56);x.fill();
+  x.fillStyle=color||'#c81e1e';x.fillText(txt,w/2,30);
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),depthTest:false}));
+  sp.scale.set(w/56*1.15,1.15,1);return sp;
+}
 function renderGeoSpec(spec){
   const g=initGeoScene();if(!g)return false;
   while(g.grp.children.length)g.grp.remove(g.grp.children[0]);
   if(!spec||!spec.points)return false;
   const names=Object.keys(spec.points);if(!names.length)return false;
-  const V={};names.forEach(n=>{const p=spec.points[n];if(Array.isArray(p)&&p.length>=3)V[n]=new THREE.Vector3(+p[0],+p[2],+p[1]);});
-  const valid=Object.keys(V);if(!valid.length)return false;
-  const box=new THREE.Box3();valid.forEach(n=>box.expandByPoint(V[n]));
+  const swap=p=>new THREE.Vector3(+p[0],+p[2],+p[1]); // 数学(x,y,z) z竖直 → three(x,z,y)
+  const raw={};names.forEach(n=>{const p=spec.points[n];if(Array.isArray(p)&&p.length>=3)raw[n]=swap(p);});
+  const valid=Object.keys(raw);if(!valid.length)return false;
+  const box=new THREE.Box3();valid.forEach(n=>box.expandByPoint(raw[n]));
   const ctr=box.getCenter(new THREE.Vector3()),size=box.getSize(new THREE.Vector3());
   const maxd=Math.max(size.x,size.y,size.z)||1,s=10/maxd;
-  valid.forEach(n=>{V[n].sub(ctr).multiplyScalar(s);});
+  const tf=v3=>v3.clone().sub(ctr).multiplyScalar(s);
+  const V={};valid.forEach(n=>{V[n]=tf(raw[n]);});
+  const getV=x=>typeof x==='string'?V[x]:(Array.isArray(x)&&x.length>=3?tf(swap(x)):null);
   g.setDist(26);g.setCam();
   const pm=new THREE.MeshBasicMaterial({color:0x1a3acc});
   valid.forEach(n=>{
@@ -607,7 +618,15 @@ function renderGeoSpec(spec){
     const gm=new THREE.BufferGeometry();gm.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));gm.computeVertexNormals();
     g.grp.add(new THREE.Mesh(gm,new THREE.MeshBasicMaterial({color:0x6c84ff,transparent:true,opacity:0.16,side:THREE.DoubleSide})));});
   (spec.edges||[]).forEach(e=>{const a=V[e[0]],b=V[e[1]];if(a&&b)g.grp.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([a,b]),new THREE.LineBasicMaterial({color:0x33508c})));});
-  (spec.highlights||[]).forEach(e=>{const a=V[e[0]],b=V[e[1]];if(a&&b)addTube(g.grp,a,b,0xff7a1a);});
+  // 辅助线（绿色虚线）
+  (spec.auxlines||[]).forEach(e=>{const a=getV(e[0]),b=getV(e[1]);if(a&&b){
+    const ln=new THREE.Line(new THREE.BufferGeometry().setFromPoints([a,b]),new THREE.LineDashedMaterial({color:0x16a34a,dashSize:0.35,gapSize:0.22}));
+    ln.computeLineDistances();g.grp.add(ln);}});
+  // 高亮所求线段（橙色粗管）
+  (spec.highlights||[]).forEach(e=>{const a=getV(e[0]),b=getV(e[1]);if(a&&b)addTube(g.grp,a,b,0xff7a1a);});
+  // 数据标注（边长/角度/距离），at 可为点名或数学坐标
+  (spec.annotations||[]).forEach(an=>{const p=getV(an.at);if(!p)return;
+    const lb=geoLabel2(an.text,an.color||'#c81e1e');lb.position.copy(p);if(an.dy)lb.position.y+=an.dy;g.grp.add(lb);});
   return true;
 }
 
@@ -681,6 +700,123 @@ function extractHighlights(resp,spec){
   return hl;
 }
 
+/* ===== 解题 kernel：向量法精确计算 + 生成图上标注/辅助线/分步解析（参考 edulab，图解同源） ===== */
+const GS={
+  sub:(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]],
+  add:(a,b)=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]],
+  scale:(a,k)=>[a[0]*k,a[1]*k,a[2]*k],
+  dot:(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2],
+  cross:(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]],
+  len:a=>Math.sqrt(a[0]*a[0]+a[1]*a[1]+a[2]*a[2]),
+  mid:(a,b)=>[(a[0]+b[0])/2,(a[1]+b[1])/2,(a[2]+b[2])/2]
+};
+function fmtLen(x){const sq=x*x,N=Math.round(sq);
+  if(Math.abs(sq-N)<1e-6){const r=Math.sqrt(N);if(Math.abs(r-Math.round(r))<1e-6)return ''+Math.round(r);
+    let k=1,m=N;for(let d=2;d*d<=m;d++){while(m%(d*d)===0){m/=d*d;k*=d;}}return (k>1?k:'')+'√'+m;}
+  return x.toFixed(3);}
+function fmtNum(x){const r=Math.round(x);if(Math.abs(x-r)<1e-9)return ''+r;return (+x.toFixed(4)).toString();}
+function fmtTrig(x){const ax=Math.abs(x);
+  for(let b=1;b<=12;b++){for(let a=0;a<=b*b;a++){if(Math.abs(ax-Math.sqrt(a)/b)<1e-6){
+    if(a===0)return '0';let k=1,m=a;for(let d=2;d*d<=m;d++){while(m%(d*d)===0){m/=d*d;k*=d;}}
+    const num=(a===1)?'1':((k>1?k:'')+'√'+m);return (x<0?'-':'')+num+'/'+b;}}}
+  return x.toFixed(4);}
+function tokPts(run){return (run.match(/[A-Z]\d?/g)||[]);}
+function normSub(t){return t.replace(/[₀₁₂₃₄₅₆₇₈₉]/g,c=>'₀₁₂₃₄₅₆₇₈₉'.indexOf(c));}
+function detectQuery(text){
+  if(!text)return null;
+  const t=normSub(text);
+  let m=t.match(/二面角\s*([A-Z]\d?)\s*[-–—]\s*([A-Z]\d?[A-Z]\d?)\s*[-–—]\s*([A-Z]\d?)/);
+  if(m){const edge=tokPts(m[2]);if(edge.length===2)return{type:'dihedral',h1:m[1],edge:edge,h2:m[3]};}
+  m=t.match(/(?:点)?\s*([A-Z]\d?)\s*到\s*(?:平面|底面)?\s*([A-Z]\d?(?:[A-Z]\d?)+)\s*(?:的)?\s*距离/);
+  if(m){const pl=tokPts(m[2]);if(pl.length>=3)return{type:'pointplane',P:m[1],plane:pl};}
+  m=t.match(/([A-Z]\d?[A-Z]\d?)\s*(?:与|和|跟)\s*(?:平面|底面)\s*([A-Z]\d?(?:[A-Z]\d?)+)\s*所?成/);
+  if(m){const l=tokPts(m[1]),pl=tokPts(m[2]);if(l.length===2&&pl.length>=3)return{type:'lineplane',line:l,plane:pl};}
+  m=t.match(/([A-Z]\d?[A-Z]\d?)\s*(?:与|和|跟)\s*([A-Z]\d?[A-Z]\d?)\s*所?成(?:的)?角/);
+  if(!m)m=t.match(/异面直线\s*([A-Z]\d?[A-Z]\d?)\s*(?:与|和|跟)\s*([A-Z]\d?[A-Z]\d?)/);
+  if(m){const l1=tokPts(m[1]),l2=tokPts(m[2]);if(l1.length===2&&l2.length===2)return{type:'lineline',l1:l1,l2:l2};}
+  if(/体积/.test(t))return{type:'volume'};
+  return null;
+}
+function solveQuery(q,spec,text){
+  const P=spec.points;if(!P)return null;
+  const has=arr=>arr.every(n=>P[n]);
+  const steps=[],highlights=[],auxlines=[],annotations=[];
+  if(q.type==='lineline'){
+    if(!has(q.l1)||!has(q.l2))return null;
+    const A=P[q.l1[0]],B=P[q.l1[1]],C=P[q.l2[0]],D=P[q.l2[1]];
+    const d1=GS.sub(B,A),d2=GS.sub(D,C),dot=GS.dot(d1,d2),n1=GS.len(d1),n2=GS.len(d2);
+    const cos=Math.abs(dot)/(n1*n2),ang=Math.acos(Math.min(1,cos))*180/Math.PI;
+    steps.push('【第1步】建系定坐标：'+[q.l1[0],q.l1[1],q.l2[0],q.l2[1]].map(n=>n+'('+P[n].map(fmtNum).join(',')+')').join('，'));
+    steps.push('【第2步】方向向量 '+q.l1.join('')+'=('+d1.map(fmtNum).join(',')+')，'+q.l2.join('')+'=('+d2.map(fmtNum).join(',')+')');
+    steps.push('【第3步】cosθ=|'+q.l1.join('')+'·'+q.l2.join('')+'| / (|'+q.l1.join('')+'|·|'+q.l2.join('')+'|) = |'+fmtNum(dot)+'| / ('+fmtLen(n1)+'·'+fmtLen(n2)+') = '+fmtTrig(cos));
+    steps.push('【结论】异面直线 '+q.l1.join('')+' 与 '+q.l2.join('')+' 所成角 θ = '+ang.toFixed(1)+'°');
+    highlights.push(q.l1,q.l2);
+    annotations.push({at:GS.mid(A,B),text:q.l1.join('')+'='+fmtLen(n1),color:'#b45309'});
+    annotations.push({at:GS.mid(C,D),text:q.l2.join('')+'='+fmtLen(n2),color:'#b45309'});
+    annotations.push({at:GS.mid(GS.mid(A,B),GS.mid(C,D)),text:'θ='+ang.toFixed(1)+'°',color:'#c81e1e',dy:1.2});
+    return{answer:'θ = '+ang.toFixed(1)+'°（cosθ = '+fmtTrig(cos)+'）',steps:steps,highlights:highlights,auxlines:auxlines,annotations:annotations};
+  }
+  if(q.type==='lineplane'){
+    if(!has(q.line)||!has(q.plane))return null;
+    const A=P[q.line[0]],B=P[q.line[1]],p0=P[q.plane[0]],p1=P[q.plane[1]],p2=P[q.plane[2]];
+    const n=GS.cross(GS.sub(p1,p0),GS.sub(p2,p0)),d=GS.sub(B,A);
+    const dot=GS.dot(d,n),nd=GS.len(d),nn=GS.len(n);
+    const sin=Math.abs(dot)/(nd*nn),ang=Math.asin(Math.min(1,sin))*180/Math.PI;
+    const t=GS.dot(GS.sub(B,p0),n)/GS.dot(n,n),foot=GS.sub(B,GS.scale(n,t));
+    steps.push('【第1步】建系定坐标：'+q.line.map(x=>x+'('+P[x].map(fmtNum).join(',')+')').join('，'));
+    steps.push('【第2步】平面 '+q.plane.join('')+' 法向量 n=('+n.map(fmtNum).join(',')+')');
+    steps.push('【第3步】直线方向 '+q.line.join('')+'=('+d.map(fmtNum).join(',')+')');
+    steps.push('【第4步】sinθ=|'+q.line.join('')+'·n| / (|'+q.line.join('')+'|·|n|) = |'+fmtNum(dot)+'| / ('+fmtLen(nd)+'·'+fmtLen(nn)+') = '+fmtTrig(sin));
+    steps.push('【结论】直线与平面所成角 θ = '+ang.toFixed(1)+'°');
+    highlights.push(q.line);auxlines.push([q.line[1],foot]);
+    annotations.push({at:GS.mid(B,foot),text:'垂线 h',color:'#15803d'});
+    annotations.push({at:GS.mid(A,B),text:'θ='+ang.toFixed(1)+'°',color:'#c81e1e',dy:0.8});
+    return{answer:'线面角 θ = '+ang.toFixed(1)+'°（sinθ = '+fmtTrig(sin)+'）',steps:steps,highlights:highlights,auxlines:auxlines,annotations:annotations};
+  }
+  if(q.type==='pointplane'){
+    if(!P[q.P]||!has(q.plane))return null;
+    const X=P[q.P],p0=P[q.plane[0]],p1=P[q.plane[1]],p2=P[q.plane[2]];
+    const n=GS.cross(GS.sub(p1,p0),GS.sub(p2,p0));
+    const dist=Math.abs(GS.dot(GS.sub(X,p0),n))/GS.len(n);
+    const t=GS.dot(GS.sub(X,p0),n)/GS.dot(n,n),foot=GS.sub(X,GS.scale(n,t));
+    steps.push('【第1步】平面 '+q.plane.join('')+' 法向量 n=('+n.map(fmtNum).join(',')+')');
+    steps.push('【第2步】取平面上点 '+q.plane[0]+'，向量 '+q.plane[0]+q.P+'=('+GS.sub(X,p0).map(fmtNum).join(',')+')');
+    steps.push('【第3步】d=|'+q.plane[0]+q.P+'·n| / |n| = |'+fmtNum(GS.dot(GS.sub(X,p0),n))+'| / '+fmtLen(GS.len(n))+' = '+fmtLen(dist));
+    steps.push('【结论】点 '+q.P+' 到平面 '+q.plane.join('')+' 的距离 d = '+fmtLen(dist));
+    auxlines.push([q.P,foot]);
+    annotations.push({at:GS.mid(X,foot),text:'d='+fmtLen(dist),color:'#c81e1e'});
+    return{answer:'距离 d = '+fmtLen(dist),steps:steps,highlights:highlights,auxlines:auxlines,annotations:annotations};
+  }
+  if(q.type==='dihedral'){
+    if(!P[q.h1]||!P[q.h2]||!has(q.edge))return null;
+    const A=P[q.edge[0]],B=P[q.edge[1]],C=P[q.h1],D=P[q.h2],u=GS.sub(B,A);
+    const perp=Q=>{const w=GS.sub(Q,A),k=GS.dot(w,u)/GS.dot(u,u);return GS.sub(w,GS.scale(u,k));};
+    const v1=perp(C),v2=perp(D),cos=GS.dot(v1,v2)/(GS.len(v1)*GS.len(v2));
+    const ang=Math.acos(Math.max(-1,Math.min(1,cos)))*180/Math.PI;
+    steps.push('【第1步】棱 '+q.edge.join('')+' 方向 u=('+u.map(fmtNum).join(',')+')');
+    steps.push('【第2步】两半平面内作垂直于棱的向量 v1=('+v1.map(fmtNum).join(',')+')，v2=('+v2.map(fmtNum).join(',')+')');
+    steps.push('【第3步】cosθ=v1·v2 / (|v1|·|v2|) = '+fmtNum(GS.dot(v1,v2))+' / ('+fmtLen(GS.len(v1))+'·'+fmtLen(GS.len(v2))+') = '+fmtNum(cos));
+    steps.push('【结论】二面角 '+q.h1+'-'+q.edge.join('')+'-'+q.h2+' = '+ang.toFixed(1)+'°');
+    highlights.push(q.edge);
+    annotations.push({at:GS.mid(A,B),text:'二面角 '+ang.toFixed(1)+'°',color:'#c81e1e',dy:0.8});
+    return{answer:'二面角 = '+ang.toFixed(1)+'°（cos = '+fmtNum(cos)+'）',steps:steps,highlights:highlights,auxlines:auxlines,annotations:annotations};
+  }
+  if(q.type==='volume'){
+    const t=normSub(text||'');function num(re){const m=t.match(re);return m?+m[1]:null;}
+    let vol=null,how='';
+    if(/正方体/.test(t)){const a=num(/棱长[为是=]?\s*(\d+\.?\d*)/)||2;vol=a*a*a;how='V=a³='+a+'³';}
+    else if(/长方体/.test(t)){const lx=num(/长[为是=]?\s*(\d+\.?\d*)/)||3,ly=num(/宽[为是=]?\s*(\d+\.?\d*)/)||2,lz=num(/高[为是=]?\s*(\d+\.?\d*)/)||2;vol=lx*ly*lz;how='V=长×宽×高='+lx+'×'+ly+'×'+lz;}
+    else if(/四棱锥/.test(t)){const a=num(/底面边长[为是=]?\s*(\d+\.?\d*)/)||2,h=num(/高[为是=]?\s*(\d+\.?\d*)/)||3;vol=a*a*h/3;how='V=(1/3)·S底·h=(1/3)·'+a+'²·'+h;}
+    else if(/三棱柱/.test(t)){const a=num(/底面边长[为是=]?\s*(\d+\.?\d*)/)||2,h=num(/高[为是=]?\s*(\d+\.?\d*)/)||3;vol=Math.sqrt(3)/4*a*a*h;how='V=S底·h=(√3/4·'+a+'²)·'+h;}
+    if(vol==null)return null;
+    steps.push('【第1步】确定几何体类型与尺寸');
+    steps.push('【第2步】'+how);
+    steps.push('【结论】体积 V = '+fmtNum(vol)+(Math.abs(vol-Math.round(vol))<1e-9?'':'（≈'+vol.toFixed(3)+'）'));
+    return{answer:'体积 V = '+fmtNum(vol),steps:steps,highlights:highlights,auxlines:auxlines,annotations:annotations};
+  }
+  return null;
+}
+
 async function solveGeo3D(){
   const txt=qs('#geoText').value.trim();
   if(!geoImg&&!txt){alert('请上传题目图片或输入题目文字');return;}
@@ -688,32 +824,51 @@ async function solveGeo3D(){
   qs('#geoOut').innerHTML='<b>正在生成三维图形...</b>';
   // 第一步：前端确定性生成几何体坐标（不依赖AI）
   lastGeoSpec=detectGeoBody(txt);
-  // 第二步：如果成功识别，立即渲染3D图（不等AI）
+  let local=null;
   if(lastGeoSpec&&lastGeoSpec.points){
-    lastGeoSpec.highlights=lastGeoSpec.highlights||[];
+    lastGeoSpec.highlights=[];lastGeoSpec.auxlines=[];lastGeoSpec.annotations=[];
+    // 第二步：本地向量法精确解题（图解同源：算出所求量并生成高亮线/辅助线/数据标注）
+    const q=detectQuery(txt);
+    if(q){try{local=solveQuery(q,lastGeoSpec,txt);}catch(e){local=null;}}
+    if(local){
+      lastGeoSpec.highlights=(local.highlights||[]).slice();
+      lastGeoSpec.auxlines=(local.auxlines||[]).slice();
+      lastGeoSpec.annotations=(local.annotations||[]).slice();
+    }
     renderGeoSpec(lastGeoSpec);
-    const np=Object.keys(lastGeoSpec.points).length,ne=(lastGeoSpec.edges||[]).length;
-    qs('#geoOut').innerHTML='<b>🧊 已渲染：'+np+' 个顶点、'+ne+' 条棱。AI 正在生成解答...</b>';
-  }else{
-    qs('#geoOut').innerHTML='<b>等待 AI 识别几何体并解答...</b>';
   }
-  // 第三步：调用AI获取分步解答（AI只负责讲解，不负责坐标）
-  const ask=geoImg
-    ?'你是立体几何老师。图片中是一道立体几何题。请给出极详细的分步解答（每步标【第N步】说明依据的定理/公式，公式用LaTeX行内$...$，最后给最终答案）。在末尾另起一行用 HIGHLIGHT:点1,点2 指出所求关键线段，如 HIGHLIGHT:A,C1。不需要输出JSON。'
-    :'你是立体几何老师。题目：'+txt+'\n请给出极详细的分步解答（每步标【第N步】说明依据的定理/公式，公式用LaTeX行内$...$，最后给最终答案）。在末尾另起一行用 HIGHLIGHT:点1,点2 指出所求关键线段，如 HIGHLIGHT:A,C1。不需要输出JSON。';
+  // 本地精确解答 HTML（图解同源）
+  let localHtml='';
+  if(local){
+    localHtml='<div style="color:#7ee0a3;font-weight:bold">📐 本地精确解（向量法 · 图解同源）</div>'+
+      local.steps.map(s=>s.replace(/</g,'&lt;')).join('<br>')+
+      '<br><b style="color:#ffcf5e">✅ '+local.answer.replace(/</g,'&lt;')+'</b>';
+  }
+  // 先把图与本地解答显示出来，再异步等 AI 讲解
+  const np=lastGeoSpec&&lastGeoSpec.points?Object.keys(lastGeoSpec.points).length:0;
+  const ne=lastGeoSpec&&lastGeoSpec.edges?lastGeoSpec.edges.length:0;
+  if(lastGeoSpec&&lastGeoSpec.points){
+    qs('#geoOut').innerHTML='<b>🧊 已渲染：'+np+' 顶点、'+ne+' 棱'+(local?'，并标注了所求数据与辅助线':'')+'</b>'+(localHtml?'<hr style="border:none;border-top:1px solid #2b3760;margin:8px 0">'+localHtml:'')+'<br><i style="color:#9fb0d8">AI 正在生成通俗讲解...</i>';
+  }
+  // 第三步：调用 AI 做通俗讲解（只负责文字，不负责坐标/计算）
+  const base=geoImg?'你是立体几何老师。图片中是一道立体几何题。':'你是立体几何老师。题目：'+txt+'\n';
+  const ask=base+'请给出通俗易懂的分步解题思路讲解（说明为什么这样建系、用到哪些定理公式，公式用LaTeX行内$...$），帮助学生理解。'+(local?'（最终数值答案已由系统精确算出为 '+local.answer+'，你只需讲思路，不必重算坐标。）':'在末尾另起一行用 HIGHLIGHT:点1,点2 指出所求关键线段，如 HIGHLIGHT:A,C1。')+'不需要输出JSON坐标。';
   let resp;
   if(geoImg) resp=await callAI([{role:'user',content:[{type:'image_url',image_url:{url:geoImg}},{type:'text',text:ask}]}],true,qs('#geoOut'));
   else resp=await callAI([{role:'user',content:ask}],false,qs('#geoOut'));
-  if(!resp){if(lastGeoSpec&&lastGeoSpec.points)drawGeo();return;}
-  // 如果第一步没识别出来，尝试从AI回答猜类型
-  if(!lastGeoSpec||!lastGeoSpec.points){lastGeoSpec=detectGeoBody(resp.slice(0,500));}
-  // 提取高亮线段
-  if(lastGeoSpec&&lastGeoSpec.points){
+  if(!resp){lastGeoSolution=localHtml||'（AI 暂不可用，但三维图与标注已生成）';drawGeo();return;}
+  // 若本地没识别出几何体，用 AI 回答兜底
+  if(!lastGeoSpec||!lastGeoSpec.points){
+    lastGeoSpec=detectGeoBody(resp.slice(0,500));
+    if(lastGeoSpec){lastGeoSpec.highlights=[];lastGeoSpec.auxlines=[];lastGeoSpec.annotations=[];}
+  }
+  if(lastGeoSpec&&lastGeoSpec.points&&!local){
     const hl=extractHighlights(resp,lastGeoSpec);
     if(hl.length)lastGeoSpec.highlights=(lastGeoSpec.highlights||[]).concat(hl);
   }
-  const solTxt=resp.replace(/HIGHLIGHT\s*[:：][^\n]*/gi,'');
-  lastGeoSolution=solTxt.replace(/[#*]/g,'').replace(/\n/g,'<br>').replace(/(<br>\s*){3,}/g,'<br><br>');
+  const aiHtml=resp.replace(/HIGHLIGHT\s*[:：][^\n]*/gi,'').replace(/[#*]/g,'').replace(/\n/g,'<br>').replace(/(<br>\s*){3,}/g,'<br><br>');
+  lastGeoSolution=(localHtml?localHtml+'<hr style="border:none;border-top:1px dashed #2b3760;margin:10px 0">':'')+
+    '<div style="color:#8fa6ff;font-weight:bold">🤖 AI 补充讲解</div>'+aiHtml;
   drawGeo();
   if(lastText)speak('解答完成');
 }
