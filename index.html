@@ -722,7 +722,66 @@ function loop3d(){
   if(qs('#lab3d').classList.contains('show')){three.orbit&&three.orbit();three.helix&&three.helix();}
   requestAnimationFrame(loop3d);
 }
-
+/* --- 立体几何专属微调代码 --- */
+let geoScene, geoGroup, geoLabelRenderer, geoImg=null;
+const GeoKernel = {
+    cube: (a=2) => ({ points:{A:[0,0,0],B:[a,0,0],C:[a,a,0],D:[0,a,0],A1:[0,0,a],B1:[a,0,a],C1:[a,a,a],D1:[0,a,a]}, edges:[['A','B'],['B','C'],['C','D'],['D','A'],['A1','B1'],['B1','C1'],['C1','D1'],['D1','A1'],['A','A1'],['B','B1'],['C','C1'],['D','D1']] }),
+    pyramid: (a=2, h=3) => ({ points:{A:[-a/2,-a/2,0],B:[a/2,-a/2,0],C:[a/2,a/2,0],D:[-a/2,a/2,0],P:[0,0,h],O:[0,0,0]}, edges:[['A','B'],['B','C'],['C','D'],['D','A'],['A','P'],['B','P'],['C','P'],['D','P'],['P','O']] }),
+    cylinder: (r=1.5, h=3.5) => ({ type:'cylinder', r, h, points:{O:[0,0,0],O1:[0,0,h],M:[r,0,0],N:[r,0,h]}, edges:[['O','O1'],['M','N']] }),
+    cone: (r=1.8, h=3.5) => ({ type:'cone', r, h, points:{O:[0,0,0],P:[0,0,h],M:[r,0,0]}, edges:[['O','P']] })
+};
+function initGeo3D(){
+    if(geoScene) return; const host = qs('#geoCanvasHost');
+    geoScene = new THREE.Scene(); const cam = new THREE.PerspectiveCamera(45, host.clientWidth/host.clientHeight, 0.1, 1000);
+    cam.position.set(10, 8, 10); const renderer = new THREE.WebGLRenderer({antialias:true});
+    renderer.setSize(host.clientWidth, host.clientHeight); host.appendChild(renderer.domElement);
+    geoLabelRenderer = new THREE.CSS2DRenderer(); geoLabelRenderer.setSize(host.clientWidth, host.clientHeight);
+    geoLabelRenderer.domElement.style.position = 'absolute'; geoLabelRenderer.domElement.style.top = '0';
+    host.appendChild(geoLabelRenderer.domElement);
+    new THREE.OrbitControls(cam, renderer.domElement);
+    geoGroup = new THREE.Group(); geoScene.add(geoGroup);
+    geoScene.add(new THREE.AmbientLight(0xffffff, 0.8));
+    const light = new THREE.DirectionalLight(0xffffff, 0.5); light.position.set(5,10,7); geoScene.add(light);
+    function anim(){ requestAnimationFrame(anim); renderer.render(geoScene, cam); geoLabelRenderer.render(geoScene, cam); }
+    anim();
+}
+function onGeoImg(inp){ const f=inp.files[0]; const rd=new FileReader(); rd.onload=e=>{geoImg=e.target.result; qs('#geoPrev').src=geoImg; qs('#geoPrev').style.display='block';}; rd.readAsDataURL(f); }
+async function solveGeo3D(){
+    const txt = qs('#geoText').value; const out = qs('#geoOut'); initGeo3D();
+    while(geoGroup.children.length > 0) geoGroup.remove(geoGroup.children[0]);
+    let probTxt = txt;
+    if(geoImg) {
+        out.innerHTML = "正在识别图片...";
+        const res = await callAI([{role:"user", content:[{type:"text",text:"识别题目"},{type:"image_url",image_url:{url:geoImg}}]}], true, out);
+        if(res) probTxt = res; qs('#geoText').value = probTxt;
+    }
+    let spec = /圆柱/.test(probTxt) ? GeoKernel.cylinder() : (/圆锥/.test(probTxt) ? GeoKernel.cone() : (/棱锥/.test(probTxt) ? GeoKernel.pyramid() : GeoKernel.cube()));
+    const vMap = {};
+    Object.keys(spec.points).forEach(name => {
+        const p = spec.points[name]; const pos = new THREE.Vector3(p[0], p[2], p[1]); vMap[name] = pos;
+        const div = document.createElement('div'); div.className='node-label'; div.textContent=name;
+        const lbl = new THREE.CSS2DObject(div); lbl.position.set(pos.x, pos.y+0.4, pos.z); geoGroup.add(lbl);
+    });
+    spec.edges.forEach(e => {
+        const g = new THREE.BufferGeometry().setFromPoints([vMap[e[0]], vMap[e[1]]]);
+        geoGroup.add(new THREE.Line(g, new THREE.LineBasicMaterial({color:0x33406e})));
+    });
+    if(spec.type==='cylinder' || spec.type==='cone'){
+        const geo = spec.type==='cylinder' ? new THREE.CylinderGeometry(spec.r,spec.r,spec.h,32) : new THREE.ConeGeometry(spec.r,spec.h,32);
+        geoGroup.add(new THREE.Mesh(geo, new THREE.MeshPhongMaterial({color:0x4f6ef7, transparent:true, opacity:0.3, side:THREE.DoubleSide})));
+    }
+    const matches = probTxt.match(/[A-Z][0-1]?[A-Z][0-1]?/g);
+    if(matches) matches.forEach(m => {
+        const p1=m.substring(0,m.length/2), p2=m.substring(m.length/2);
+        if(vMap[p1] && vMap[p2]) {
+            const g = new THREE.BufferGeometry().setFromPoints([vMap[p1], vMap[p2]]);
+            geoGroup.add(new THREE.Line(g, new THREE.LineBasicMaterial({color:0xffa500, linewidth:3})));
+            const tagDiv = document.createElement('div'); tagDiv.className='measure-tag'; tagDiv.textContent=`L=${vMap[p1].distanceTo(vMap[p2]).toFixed(1)}`;
+            const tag = new THREE.CSS2DObject(tagDiv); tag.position.copy(vMap[p1].clone().lerp(vMap[p2],0.5)); geoGroup.add(tag);
+        }
+    });
+    await callAI([{role:"user", content:`详细解答此题，列出坐标：${probTxt}`}], false, out);
+}
 loadCfgUI();
 </script>
 </body>
