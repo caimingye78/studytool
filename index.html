@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>⚡ 全科超级学习利器 v6.2</title>
+<title>⚡ 全科超级学习利器 v6.4</title>
 <script>window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']],displayMath:[['$$','$$']]}};</script>
 <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
@@ -13,7 +13,7 @@
 body{background:#0f1424;color:#e8ecf5;min-height:100vh}
 header{background:linear-gradient(90deg,#1a2347,#2b1a47);padding:14px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 header h1{font-size:20px}
-nav{display:flex;gap:4px;flex-wrap:wrap;padding:8px 12px;background:#141a30;position:sticky;top:0;z-index:10;box-shadow:0 4px 10px rgba(0,0,0,0.3)}
+nav{display:flex;gap:4px;flex-wrap:wrap;padding:8px 12px;background:#141a30;position:sticky;top:0;z-index:100;box-shadow:0 4px 10px rgba(0,0,0,0.3)}
 nav button{background:#222b4d;color:#cfd8f5;border:none;padding:8px 12px;border-radius:6px;cursor:pointer;font-size:12px;margin:2px}
 nav button.active{background:linear-gradient(90deg,#4f6ef7,#9b59f7);color:#fff;font-weight:bold}
 main{padding:12px;max-width:1000px;margin:0 auto}
@@ -31,12 +31,12 @@ canvas.sim{background:#0a0e1c;border-radius:10px;width:100%;touch-action:none}
 .chips.math button{background:#2e2450}.chips.chem button{background:#1f4030}.chips.bio button{background:#40331f}
 .pt{display:grid;grid-template-columns:repeat(18,1fr);gap:2px}.pt button{background:#16331f;color:#cfe;border:1px solid #2e5c3a;border-radius:4px;font-size:8px;padding:2px 0}
 .tag{font-size:12px;color:#7ee0a3}
-iframe.geo-frame { width:100%; height:800px; border:none; border-radius:12px; background:#fff; }
+iframe.geo-frame { width:100%; height:85vh; border:none; border-radius:12px; background:#0f1424; }
 .spin { display:inline-block; animation:r 1s linear infinite;} @keyframes r{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
-<header><h1>⚡ 全科超级学习利器</h1><span class="tag" id="keyState"></span></header>
+<header><h1>⚡ 全科超级学习利器</h1><span class="tag" id="keyState">未配置 Key</span></header>
 <nav id="mainNav">
     <button class="active" onclick="go('learn',this)">📖 知识讲解</button>
     <button onclick="go('chem',this)">🧪 化学生物</button>
@@ -47,127 +47,102 @@ iframe.geo-frame { width:100%; height:800px; border:none; border-radius:12px; ba
     <button onclick="go('lab',this)">🔬 2D物理</button>
     <button onclick="go('lab3d',this)">🪐 3D物理</button>
     <button onclick="go('quiz',this)">🎯 自动出题</button>
-    <button onclick="go('photo',this)">📷 拍照解题</button>
-    <button onclick="go('vidlab',this)">🎬 视频分析</button>
     <button onclick="go('set',this)">⚙️ 设置</button>
 </nav>
 
 <main>
-    <!-- 1. 知识讲解 (找回语音功能) -->
+    <!-- 1. 知识讲解 -->
     <section id="learn" class="page show">
         <div class="card"><h2>⚛️ 物理专题</h2><div class="chips" id="topicsP"></div></div>
         <div class="card"><h2>📐 数学专题</h2><div class="chips math" id="topicsM"></div></div>
         <div class="card"><h2>🧪 化学专题</h2><div class="chips chem" id="topicsC"></div></div>
         <div class="card"><h2>🧬 生物专题</h2><div class="chips bio" id="topicsB"></div></div>
         <div class="card"><h2>自由提问</h2>
-            <div class="row"><input type="text" id="customTopic" placeholder="输入问题或点击🎤语音提问..." style="flex:1"><button class="act" onclick="explain(qs('#customTopic').value)">提问</button></div>
+            <div class="row"><input type="text" id="customTopic" placeholder="输入问题或🎤提问..." style="flex:1"><button class="act" onclick="explain(qs('#customTopic').value)">提问</button></div>
             <div class="row">
                 <button class="sub" onclick="speak(lastText)">🔊 朗读解答</button>
                 <button class="sub" onclick="speechSynthesis.cancel()">⏹ 停止</button>
                 <button class="sub" onclick="listen('customTopic')">🎤 语音提问</button>
             </div>
-            <div class="out" id="learnOut">点击上方知识点或直接语音/文字提问。</div>
+            <div class="out" id="learnOut">点击上方知识点开始学习。</div>
         </div>
     </section>
 
     <!-- 2. 化学生物 -->
     <section id="chem" class="page">
-        <div class="card"><h2>🧪 元素周期表</h2><div class="pt" id="ptGrid"></div><div class="out" id="ptOut">点元素看详评。</div></div>
-        <div class="card"><h2>⚖️ 方程式解析</h2><input type="text" id="eqIn" placeholder="如: Cu+HNO3(稀)" style="width:100%"><button class="act" onclick="balanceEq()">配平解析</button><div class="out" id="eqOut"></div></div>
-        <div class="card"><h2>🧬 生物流程拆解</h2><div class="chips bio" id="bioChips"></div><div class="out" id="bioOut"></div></div>
-    </section>
+        <div class="card"><h2>🧪 元素周期表 (前四周期)</h2><div class="pt" id="ptGrid"></div><div class="out" id="ptOut">点元素看详评。</div></div>
+        <div class="card"><h2>⚖️ AI 方程式解析</h2><div class="row"><input type="text" id="eqIn" placeholder="如: Cu+HNO3(稀)" style="flex:1"><button class="act" onclick="balanceEq()">解析</button></div><div class="out" id="eqOut"></div></div>
+        <div class="card"><h2>🧬 生物流程拆解</h2><div class="chips bio" id="topicsBioFull"></div><div class="out" id="bioOut"></div></section>
 
     <!-- 3. 学霸工具 -->
     <section id="study" class="page">
-        <div class="card"><h2>🦉 费曼学习法</h2><textarea id="feyText" placeholder="用自己的话讲一遍知识点..." style="width:100%;height:100px"></textarea>
+        <div class="card"><h2>🦉 费曼学习法</h2><p style="font-size:12px; color:#9fb0d8">用自己的话讲一遍，AI 给当“学生”找漏洞。</p><textarea id="feyText" placeholder="不看书，讲解一下你刚学的知识点..." style="width:100%;height:120px;margin-top:10px"></textarea>
             <div class="row"><button class="act" onclick="feynman()">AI 批改</button><button class="sub" onclick="listen('feyText')">🎤 语音录入</button></div>
             <div class="out" id="feyOut"></div>
         </div>
-        <div class="card"><h2>📕 错题本</h2><div id="wrongList"></div></div>
+        <div class="card"><h2>🎵 记忆口诀生成</h2><div class="row"><input type="text" id="mneIn" placeholder="要记的内容..." style="flex:1"><button class="act" onclick="mnemonic()">编口诀</button></div><div class="out" id="mneOut"></div></div>
+        <div class="card"><h2>📕 错题本</h2><button class="sub" onclick="renderWrong()">刷新列表</button><div id="wrongList"></div></div>
     </section>
 
-    <!-- 4. 立体几何 3D -->
+    <!-- 4. 立体几何 3D (独立文件加载) -->
     <section id="geo3d" class="page">
-        <div class="card" style="padding:0; background:#fff">
-            <iframe src="geo.html" class="geo-frame" id="geoIframe"></iframe>
-        </div>
+        <iframe src="geo.html" class="geo-frame" id="geoIframe"></iframe>
     </section>
 
     <!-- 5. 数学函数实验室 -->
     <section id="mathlab" class="page">
-        <div class="card"><h2>📈 函数实验室</h2><input type="text" id="fx" value="a*sin(x)" style="width:100%"><input type="range" id="aSlider" min="-5" max="5" step="0.1" oninput="drawFx()"><canvas id="cm" class="sim" width="800" height="400"></canvas></div>
+        <div class="card"><h2>📈 函数实验室 (a 滑块控制)</h2><div class="row"><input type="text" id="fx" value="a*sin(x)+x/2" style="flex:1"><label>a=<span id="av">1</span></label><input type="range" id="aSlider" min="-5" max="5" step="0.1" value="1" oninput="qs('#av').textContent=this.value;drawFx()"></div><canvas id="cm" class="sim" width="900" height="420"></canvas></div>
     </section>
 
     <!-- 6. GeoGebra -->
     <section id="ggb" class="page">
-        <div id="ggbDiv" style="width:100%;height:600px"></div>
+        <div class="card"><h2>🧮 GeoGebra 互动画板</h2><div id="ggbDiv" style="width:100%;height:600px;background:#fff;border-radius:8px"></div></div>
     </section>
 
     <!-- 7. 2D 物理实验 -->
     <section id="lab" class="page">
-        <div class="card"><h2>🚀 抛体运动</h2><button class="act" onclick="fire()">发射</button><canvas id="c1" class="sim" width="800" height="300"></canvas></div>
-        <div class="card"><h2>🕰 单摆</h2><canvas id="c3" class="sim" width="800" height="300"></canvas></div>
+        <div class="card"><h2>🚀 抛体运动</h2><div class="row"><label>初速</label><input type="range" id="v0" min="5" max="50" value="25"><button class="act" onclick="fire()">发射</button></div><canvas id="c1" class="sim" width="900" height="320"></canvas></div>
+        <div class="card"><h2>🕰 单摆</h2><canvas id="c3" class="sim" width="900" height="320"></canvas></div>
     </section>
 
     <!-- 8. 3D 物理实验 -->
     <section id="lab3d" class="page">
-        <div class="card"><h2>🛰 3D 卫星轨道</h2><canvas id="t1" class="sim" width="800" height="400"></canvas></div>
+        <div class="card"><h2>🛰 3D 卫星轨道</h2><canvas id="t1" class="sim" width="900" height="450"></canvas></div>
     </section>
 
     <!-- 9. 自动出题 -->
     <section id="quiz" class="page">
         <div class="card"><h2>🎯 AI 自动命题</h2>
-            <div class="row">
-                <select id="qSubj"><option>物理</option><option>数学</option><option>化学</option><option>生物</option></select>
-                <button class="act" onclick="genQuiz()">出一道题</button>
-            </div>
+            <div class="row"><select id="qSubj"><option>物理</option><option>数学</option><option>化学</option><option>生物</option></select><button class="act" onclick="genQuiz()">出一道题</button></div>
             <div class="out" id="quizOut"></div>
-            <div class="row"><button class="sub" onclick="speak(lastQuestion)">🔊 读题</button></div>
+            <div class="row"><button class="sub" onclick="saveWrong()">⭐ 存入错题本</button></div>
         </div>
     </section>
 
     <!-- 10. 设置 -->
     <section id="set" class="page">
-        <div class="card"><h2>⚙️ API 设置</h2><input type="password" id="cfgKey" placeholder="智谱 API Key"><button class="act" onclick="saveCfg()">保存</button></div>
+        <div class="card"><h2>⚙️ API 设置</h2><p style="font-size:12px; color:#9fb0d8; margin-bottom:10px">配置智谱 API Key 启用 AI 功能。</p><div class="row"><input type="password" id="cfgKey" placeholder="粘贴你的 Key" style="flex:1"><button class="act" onclick="saveCfg()">保存</button></div></div>
     </section>
 </main>
 
 <script>
 const qs=s=>document.querySelector(s);
-let lastText="", lastQuestion="";
+let lastText="", lastQuestion="", lastPhotoProblem="";
 
-// 页面切换
+/* ---------- 核心导航与 AI ---------- */
 function go(id,btn){
     document.querySelectorAll('.page').forEach(p=>p.classList.remove('show'));
     qs('#'+id).classList.add('show');
     document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
     if(btn) btn.classList.add('active');
-    if(id==='lab3d' && typeof init3D === 'function') init3D();
-    if(id==='ggb' && typeof loadGGB === 'function') loadGGB();
+    if(id==='lab3d') init3D();
+    if(id==='mathlab') drawFx();
+    if(id==='study') renderWrong();
 }
 
-// 语音朗读
-function speak(t){
-    if(!t) return;
-    speechSynthesis.cancel();
-    const u=new SpeechSynthesisUtterance(t.slice(0,3000));
-    u.lang='zh-CN'; u.rate=1.05;
-    speechSynthesis.speak(u);
-}
-
-// 语音识别 (提问)
-function listen(id){
-    const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-    if(!SR) return alert('当前浏览器不支持语音识别，建议使用 Chrome');
-    const r=new SR(); r.lang='zh-CN';
-    r.onresult=e=>{ qs('#'+id).value=e.results[0][0].transcript; };
-    r.start();
-}
-
-// 通用 AI 调用
 async function callAI(msgs,vision,outEl){
     const key=localStorage.getItem('zk');
-    if(!key){outEl.textContent='⚠️ 请先在「设置」中配置 API Key';return;}
+    if(!key){outEl.textContent='⚠️ 请在「设置」页填入 API Key';return;}
     outEl.innerHTML='<span class="spin">⏳</span> AI 思考中...';
     try{
         const r=await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions',{
@@ -183,22 +158,89 @@ async function callAI(msgs,vision,outEl){
     }catch(e){outEl.textContent='❌ 失败:'+e.message;}
 }
 
-// 知识点数据
-const TP=['牛顿第二定律','动量守恒','机械能守恒','万有引力','电场强度','闭合电路欧姆定律'];
-const TM=['导数单调性','圆锥曲线离心率','三角函数图象','等差数列','立体几何向量法'];
+/* ---------- 语音功能 ---------- */
+function speak(t){ if(!t) return; speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(t.slice(0,3000)); u.lang='zh-CN'; u.rate=1.05; speechSynthesis.speak(u); }
+function listen(id){
+    const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+    if(!SR) return alert('浏览器不支持');
+    const r=new SR(); r.lang='zh-CN'; r.onresult=e=>{ qs('#'+id).value=e.results[0][0].transcript; }; r.start();
+}
+
+/* ---------- 知识点填充 ---------- */
+const TP=['牛顿第二定律','动量守恒','万有引力','电场强度','磁场安培力','电磁感应','简谐振动'];
+const TM=['导数单调性','圆锥曲线','三角函数','数列求和','立体几何向量法','概率统计'];
+const TC=['氧化还原','离子反应','周期律','电化学','平衡常数','有机官能团'];
+const TB=['光合作用','减数分裂','遗传规律','DNA转录','内环境稳态'];
 TP.forEach(t=>{const b=document.createElement('button');b.textContent=t;b.onclick=()=>explain(t);qs('#topicsP').appendChild(b)});
 TM.forEach(t=>{const b=document.createElement('button');b.textContent=t;b.onclick=()=>explain(t);qs('#topicsM').appendChild(b)});
+TC.forEach(t=>{const b=document.createElement('button');b.textContent=t;b.onclick=()=>explain(t);qs('#topicsC').appendChild(b)});
+TB.forEach(t=>{const b=document.createElement('button');b.textContent=t;b.onclick=()=>explain(t);qs('#topicsB').appendChild(b)});
+TB.forEach(t=>{const b=document.createElement('button');b.textContent=t;b.onclick=()=>bioFlow(t);qs('#topicsBioFull').appendChild(b)});
 
-function explain(t){ callAI([{role:'user',content:'详细讲解知识点，包含定义、公式和易错点：'+t}],false,qs('#learnOut')); }
+function explain(t){ callAI([{role:'user',content:'作为顶级老师，详细讲解知识点：'+t}],false,qs('#learnOut')); }
+function bioFlow(t){ callAI([{role:'user',content:'用生活比喻和步骤流拆解生物过程：'+t}],false,qs('#bioOut')); }
+function balanceEq(){ callAI([{role:'user',content:'配平并解析反应：'+qs('#eqIn').value}],false,qs('#eqOut')); }
+function feynman(){ callAI([{role:'user',content:'我讲一遍'+qs('#feyText').value+'，请挑刺追问。'}],false,qs('#feyOut')); }
+function mnemonic(){ callAI([{role:'user',content:'为这个知识编个顺口溜口诀：'+qs('#mneIn').value}],false,qs('#mneOut')); }
 
-function saveCfg(){localStorage.setItem('zk',qs('#cfgKey').value.trim()); qs('#keyState').textContent='✅ API Key 已配置'; alert('保存成功');}
+/* ---------- 元素周期表 ---------- */
+const PT=['H','He','Li','Be','B','C','N','O','F','Ne','Na','Mg','Al','Si','P','S','Cl','Ar','K','Ca'];
+PT.forEach(s=>{const b=document.createElement('button');b.textContent=s;b.onclick=()=>callAI([{role:'user',content:'解释元素:'+s}],false,qs('#ptOut'));qs('#ptGrid').appendChild(b)});
 
-window.onload=()=>{
-    if(localStorage.getItem('zk')) qs('#keyState').textContent='✅ API Key 已配置';
-    // 默认填充一些化学专题按钮作为示例
-    const TC=['物质的量','氧化还原反应','离子方程式','原电池'];
-    TC.forEach(t=>{const b=document.createElement('button');b.textContent=t;b.onclick=()=>explain(t);qs('#topicsC').appendChild(b)});
-};
+/* ---------- 2D 物理引擎 ---------- */
+const c1=qs('#c1'),x1=c1.getContext('2d');let projs=[];
+function fire(){ const v=+qs('#v0').value; projs.push({x:30,y:300,vx:v*2.8,vy:-v*2.8,t:[]}); }
+function drawProj(){
+    x1.clearRect(0,0,900,320); x1.strokeStyle='#33406e'; x1.strokeRect(0,0,900,302);
+    projs.forEach(p=>{
+        p.x+=p.vx*0.02; p.y+=p.vy*0.02; p.vy+=9.8*0.08; if(p.y>300){p.y=300;p.vx=0;}
+        x1.fillStyle='#ffcf5e'; x1.beginPath(); x1.arc(p.x,p.y,5,0,7); x1.fill();
+    });
+    requestAnimationFrame(drawProj);
+}
+drawProj();
+
+/* ---------- 3D 物理引擎 (卫星轨道) ---------- */
+let threeInited=false;
+function init3D(){
+    if(threeInited) return; threeInited=true;
+    const cv=qs('#t1'); const R=new THREE.WebGLRenderer({canvas:cv}); const sc=new THREE.Scene();
+    const cam=new THREE.PerspectiveCamera(45,2,0.1,1000); cam.position.set(20,20,20); cam.lookAt(0,0,0);
+    const earth=new THREE.Mesh(new THREE.SphereGeometry(4,32,32), new THREE.MeshPhongMaterial({color:0x2244ff})); sc.add(earth);
+    const light=new THREE.PointLight(0xffffff,1.5); light.position.set(10,10,10); sc.add(light);
+    const sat=new THREE.Mesh(new THREE.SphereGeometry(0.5,16,16), new THREE.MeshBasicMaterial({color:0xffff00})); sc.add(sat);
+    let angle=0;
+    function anim(){ requestAnimationFrame(anim); angle+=0.02; sat.position.set(12*Math.cos(angle),0,12*Math.sin(angle)); R.render(sc,cam); }
+    anim();
+}
+
+/* ---------- 数学函数绘制 ---------- */
+function drawFx(){
+    const cv=qs('#cm'),ctx=cv.getContext('2d'); ctx.clearRect(0,0,900,420);
+    const a=parseFloat(qs('#aSlider').value); const expr=qs('#fx').value;
+    ctx.strokeStyle='#4f6ef7'; ctx.beginPath();
+    for(let i=0;i<900;i++){
+        let x=(i-450)/40; try{ 
+            let y=eval(expr.replace(/x/g,`(${x})`).replace(/a/g,`(${a})`).replace(/sin/g,'Math.sin'));
+            ctx.lineTo(i, 210-y*40);
+        }catch(e){}
+    }
+    ctx.stroke();
+}
+
+/* ---------- 存储与设置 ---------- */
+function saveCfg(){ localStorage.setItem('zk',qs('#cfgKey').value.trim()); qs('#keyState').textContent='✅ 已配置'; alert('已保存'); }
+function saveWrong(){ 
+    const h=JSON.parse(localStorage.getItem('wrongBook')||'[]'); 
+    h.unshift({q:lastQuestion,t:new Date().toLocaleString()}); 
+    localStorage.setItem('wrongBook',JSON.stringify(h)); alert('已存入错题本');
+}
+function renderWrong(){
+    const h=JSON.parse(localStorage.getItem('wrongBook')||'[]');
+    qs('#wrongList').innerHTML=h.map(e=>`<div class="out"><b>${e.t}</b><br>${e.q}</div>`).join('');
+}
+
+window.onload=()=>{ if(localStorage.getItem('zk')) qs('#keyState').textContent='✅ 已配置'; };
 </script>
 </body>
 </html>
