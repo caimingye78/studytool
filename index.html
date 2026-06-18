@@ -296,7 +296,7 @@ const qs=s=>document.querySelector(s);
 let lastText="",lastQuestion="",lastPhotoProblem="";
 
 /* ---------- 导航 ---------- */
-function go(id,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('show'));qs('#'+id).classList.add('show');document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));btn.classList.add('active');if(id==='lab3d')init3D();if(id==='mathlab')drawFx();if(id==='study')renderWrong();if(id==='geo3d')loadGGB3D();}
+function go(id,btn){if(id==='geo3d') initGeo3D();document.querySelectorAll('.page').forEach(p=>p.classList.remove('show'));qs('#'+id).classList.add('show');document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));btn.classList.add('active');if(id==='lab3d')init3D();if(id==='mathlab')drawFx();if(id==='study')renderWrong();if(id==='geo3d')loadGGB3D();}
 
 /* ---------- 通用 API ---------- */
 const PRESETS={
