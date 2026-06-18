@@ -178,21 +178,18 @@ img.preview{max-width:100%;border-radius:10px;margin-top:8px}
 </section>
 
 <section id="geo3d" class="page">
-<div class="card"><h2>🧊 立体几何 3D 解题（上传题目 → 自动生成可旋转三维图 + 分步讲解）</h2>
-<div class="row">
-<button class="act" onclick="qs('#geoFile').click()">🖼 上传题目图片</button>
-<input type="file" id="geoFile" accept="image/*" hidden onchange="onGeoImg(this)">
-<button class="sub" onclick="qs('#geoText').value='';geoImg=null;qs('#geoPrev').style.display='none'">清空</button>
-</div>
-<textarea id="geoText" placeholder="也可直接输入题目文字，如：正方体ABCD-A1B1C1D1棱长为2，求异面直线AC与BD1所成的角…" style="width:100%;min-height:80px"></textarea>
-<img id="geoPrev" class="preview" style="display:none">
-<div class="row"><button class="act" onclick="solveGeo3D()">🚀 生成3D图 + 分步解答</button>
-<button class="sub" onclick="speak(lastText)">🔊 朗读</button>
-<button class="sub" onclick="reGeo3D()">🔄 仅重画3D图</button></div>
-<div id="ggb3dDiv" style="background:#fff;border-radius:10px;min-height:420px;margin-top:8px"></div>
-<p class="hint">复用已加载的 GeoGebra（3D 模式），无需其他框架。三维图可手指拖动旋转、缩放；AI 自动建系、定点、连线画出几何体，配合下方分步解答理解。</p>
-<div class="out" id="geoOut">支持正方体、长方体、棱锥、棱柱、球等立体几何题：自动建系、定点、连线，并给出每一步依据。</div>
-</div>
+    <div class="card">
+        <h2>🧊 立体几何 3D 增强版（带标注、辅助线、圆柱圆锥）</h2>
+        <div class="row">
+            <button class="act" onclick="qs('#geoFile').click()">🖼️ 上传图片</button>
+            <input type="file" id="geoFile" accept="image/*" hidden onchange="onGeoImg(this)">
+            <button class="sub" onclick="solveGeo3D()">🚀 开始解析</button>
+        </div>
+        <textarea id="geoText" placeholder="手动输入题目，如：正方体ABCD-A1B1C1D1棱长为2，求对角线AC1的长度" style="width:100%;min-height:80px;margin-top:10px"></textarea>
+        <img id="geoPrev" class="preview" style="display:none">
+        <div id="geoCanvas" style="width:100%; height:450px; background:#0a0e1c; border-radius:10px; margin-top:10px; position:relative;"></div>
+        <div class="out" id="geoOut">等待指令...</div>
+    </div>
 </section>
 
 <section id="lab" class="page">
