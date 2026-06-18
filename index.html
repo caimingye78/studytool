@@ -37,7 +37,6 @@ input[type=range]{accent-color:#6c84ff}
 .chips button{background:#243056;color:#cfe;border:none;padding:7px 12px;border-radius:16px;cursor:pointer;font-size:13px}
 .chips.math button{background:#2e2450}.chips.chem button{background:#1f4030}.chips.bio button{background:#40331f}
 .pt{display:grid;grid-template-columns:repeat(18,1fr);gap:2px}.pt button{background:#16331f;color:#cfe;border:1px solid #2e5c3a;border-radius:4px;font-size:9px;line-height:1.25;padding:2px 0;cursor:pointer}
-.pt button b{font-size:12px}
 #video,#vsrc{width:100%;border-radius:10px;background:#000}
 img.preview{max-width:100%;border-radius:10px;margin-top:8px}
 #thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
@@ -45,7 +44,6 @@ img.preview{max-width:100%;border-radius:10px;margin-top:8px}
 .tag{font-size:12px;color:#7ee0a3}
 .info3d{font-size:13px;color:#7ee0a3;margin-top:6px}
 .hint{font-size:13px;color:#9fb0d8;line-height:1.8}
-/* 3D几何专属样式 */
 .node-label{color:#7ee0a3; font-weight:bold; font-size:16px; pointer-events:none; background:rgba(0,0,0,0.3); padding:2px; border-radius:4px;}
 .measure-tag{color:#f77; background:rgba(0,0,0,0.6); padding:2px 5px; border-radius:4px; font-size:12px; font-weight:bold;}
 .spin{display:inline-block;animation:r 1s linear infinite}@keyframes r{to{transform:rotate(360deg)}}
@@ -75,51 +73,44 @@ img.preview{max-width:100%;border-radius:10px;margin-top:8px}
 <div class="card"><h2>🧪 化学知识点</h2><div class="chips chem" id="topicsC"></div></div>
 <div class="card"><h2>🧬 生物知识点</h2><div class="chips bio" id="topicsB"></div></div>
 <div class="card"><h2>自由提问</h2>
-<div class="row"><input type="text" id="customTopic" placeholder="输入任意问题..." style="flex:1">
-<button class="act" onclick="explain(qs('#customTopic').value)">讲解</button></div>
+<div class="row"><input type="text" id="customTopic" placeholder="输入问题..." style="flex:1"><button class="act" onclick="explain(qs('#customTopic').value)">讲解</button></div>
 <div class="row"><button class="sub" onclick="speak(lastText)">🔊 朗读</button><button class="sub" onclick="speechSynthesis.cancel()">⏹ 停止</button><button class="sub" onclick="listen('customTopic')">🎤 语音提问</button></div>
 <div class="out" id="learnOut">点击上方知识点开始学习。</div>
 </div>
 </section>
 
-<section id="chem" class="page">
-<div class="card"><h2>🧪 互动元素周期表</h2><div class="pt" id="ptGrid"></div><div class="out" id="ptOut">点元素看详评。</div></div>
-<div class="card"><h2>⚖️ AI 方程式配平</h2><div class="row"><input type="text" id="eqIn" placeholder="Fe+O2"><button class="act" onclick="balanceEq()">解析</button></div><div class="out" id="eqOut"></div></div>
-<div class="card"><h2>🧬 生物流程拆解</h2><div class="chips bio"><button onclick="bioFlow('光合作用')">光合作用</button><button onclick="bioFlow('有氧呼吸')">有氧呼吸</button></div><div class="out" id="bioOut"></div></div>
-</section>
-
-<section id="study" class="page">
-<div class="card"><h2>🦉 费曼学习法检验</h2><textarea id="feyText" placeholder="用自己的话讲解..." style="width:100%;min-height:110px"></textarea>
-<div class="row"><button class="act" onclick="feynman()">提交给 AI 批改</button><button class="sub" onclick="listen('feyText')">🎤 口述</button></div><div class="out" id="feyOut"></div></div>
-<div class="card"><h2>🎵 AI 记忆口诀生成器</h2><div class="row"><input type="text" id="mneIn" placeholder="要记的内容"><button class="act" onclick="mnemonic()">编口诀</button></div><div class="out" id="mneOut"></div></div>
-<div class="card"><h2>📕 错题本</h2><div id="wrongList"></div></section>
-
-<section id="mathlab" class="page">
-<div class="card"><h2>📈 函数图象实验室</h2><div class="row"><input type="text" id="fx" value="a*sin(x)+x/3" style="flex:1" oninput="drawFx()"><label>a=<span id="av">1.0</span></label><input type="range" id="aSlider" min="-3" max="3" step="0.1" value="1" oninput="qs('#av').textContent=this.value;drawFx()"></div><canvas id="cm" class="sim" width="900" height="420"></canvas></div>
-</section>
-
-<section id="ggb" class="page">
-<div class="card"><h2>🧮 GeoGebra 互动画板</h2><div id="ggbDiv" style="width:100%;height:600px;background:#fff;border-radius:10px"></div></div>
-</section>
-
 <section id="geo3d" class="page">
-<div class="card"><h2>🧊 立体几何 3D 增强实验室</h2>
-<div class="row"><button class="act" onclick="qs('#geoFile').click()">📷 拍照/传图</button><input type="file" id="geoFile" accept="image/*" hidden onchange="onGeoImg(this)">
-<button class="sub" onclick="solveGeo3D()">🚀 开始解析</button></div>
-<textarea id="geoText" placeholder="例：正方体棱长2，求AC1的角" style="width:100%;min-height:80px;margin-top:10px"></textarea>
-<img id="geoPrev" class="preview" style="display:none">
-<div id="geoCanvasHost" style="width:100%; height:400px; background:#0a0e1c; border-radius:10px; margin-top:10px; position:relative;"></div>
-<div class="out" id="geoOut"></div></div>
+    <div class="card">
+        <h2>🧊 立体几何 3D 增强实验室</h2>
+        <div class="row">
+            <button class="act" onclick="qs('#geoFile').click()">📷 拍照/传图</button>
+            <input type="file" id="geoFile" accept="image/*" hidden onchange="onGeoImg(this)">
+            <button class="sub" onclick="solveGeo3D()">🚀 开始解析</button>
+        </div>
+        <textarea id="geoText" placeholder="例：正方体ABCD-A1B1C1D1棱长2，求AC与BD1的角" style="width:100%;min-height:80px;margin-top:10px"></textarea>
+        <img id="geoPrev" class="preview" style="display:none">
+        <div id="geoCanvasHost" style="width:100%; height:400px; background:#0a0e1c; border-radius:10px; margin-top:10px; position:relative;"></div>
+        <div class="out" id="geoOut"></div>
+    </div>
 </section>
 
-<section id="lab" class="page">
-<div class="card"><h2>🚀 抛体运动</h2><button class="act" onclick="fire()">发射</button><canvas id="c1" class="sim" width="900" height="320"></canvas></div>
-<div class="card"><h2>🌊 波的干涉</h2><canvas id="c2" class="sim" width="900" height="300"></canvas></div>
+<section id="chem" class="page">
+<div class="card"><h2>🧪 互动元素周期表</h2><div class="pt" id="ptGrid"></div><div class="out" id="ptOut">点元素。</div></div>
+<div class="card"><h2>⚖️ AI 方程式配平</h2><button class="act" onclick="balanceEq()">解析</button><div class="out" id="eqOut"></div></div>
+</section>
+
+<section id="mathlab" class="page"><div class="card"><h2>📈 函数实验室</h2><canvas id="cm" class="sim" width="900" height="420"></canvas></div></section>
+<section id="ggb" class="page"><div class="card"><h2>🧮 GeoGebra 画板</h2><div id="ggbDiv" style="width:100%;height:600px;background:#fff"></div></div></section>
+<section id="lab" class="page"><div class="card"><h2>🚀 抛体运动</h2><button class="act" onclick="fire()">发射</button><canvas id="c1" class="sim" width="900" height="320"></canvas></div></section>
+<section id="lab3d" class="page"><div class="card"><h2>🛰 卫星轨道 3D</h2><canvas id="t1" class="sim" width="900" height="450"></canvas></div></section>
+<section id="quiz" class="page"><div class="card"><h2>🎯 出题</h2><div class="out" id="quizOut"></div></section>
+<section id="photo" class="page"><div class="card"><h2>📷 拍照解题</h2><div id="thumbs"></div><div class="out" id="photoOut"></div></div></section>
+<section id="set" class="page"><div class="card"><h2>⚙️ 设置</h2><input type="password" id="cfgKey" placeholder="Key"><button class="act" onclick="saveCfg()">保存</button></div></section>
 </main>
 
 <script>
 const qs=s=>document.querySelector(s);
-let lastText="",lastQuestion="",lastPhotoProblem="",imgs=[],threeInited=false;
+let lastText="",lastQuestion="",imgs=[],threeInited=false;
 
 function go(id,btn){
     document.querySelectorAll('.page').forEach(p=>p.classList.remove('show'));
@@ -127,7 +118,6 @@ function go(id,btn){
     document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
     if(btn) btn.classList.add('active');
     if(id==='lab3d') init3D();
-    if(id==='mathlab') drawFx();
     if(id==='geo3d') initGeo3D();
 }
 
@@ -149,7 +139,6 @@ async function callAI(messages,vision,outEl){
     }catch(e){outEl.textContent='网络错误';}
 }
 
-/* --- 基础物理逻辑 --- */
 const c1=qs('#c1'),x1=c1.getContext('2d');let projs=[];
 function fire(){ projs.push({x:30,y:300,vx:80,vy:-100}); }
 function drawProj(){ x1.clearRect(0,0,900,320); projs.forEach(p=>{p.x+=p.vx*0.05; p.y+=p.vy*0.05; p.vy+=9.8*0.2; if(p.y>300)p.y=300; x1.fillStyle='#ffcf5e'; x1.beginPath(); x1.arc(p.x,p.y,5,0,7); x1.fill();}); requestAnimationFrame(drawProj); }
@@ -163,12 +152,16 @@ const GeoKernel = {
     cylinder: (r=1.5, h=3.5) => ({ type:'cylinder', r, h, points:{O:[0,0,0],O1:[0,0,h],M:[r,0,0],N:[r,0,h]}, edges:[['O','O1'],['M','N']] }),
     cone: (r=1.8, h=3.5) => ({ type:'cone', r, h, points:{O:[0,0,0],P:[0,0,h],M:[r,0,0]}, edges:[['O','P']] })
 };
+
 function initGeo3D(){
     if(geoScene) return; const host = qs('#geoCanvasHost');
-    geoScene = new THREE.Scene(); const cam = new THREE.PerspectiveCamera(45, host.clientWidth/host.clientHeight, 0.1, 1000);
-    cam.position.set(10, 8, 10); const renderer = new THREE.WebGLRenderer({antialias:true});
+    geoScene = new THREE.Scene(); geoScene.background = new THREE.Color(0x0a0e1c);
+    const cam = new THREE.PerspectiveCamera(45, host.clientWidth/host.clientHeight, 0.1, 1000);
+    cam.position.set(10, 8, 10);
+    const renderer = new THREE.WebGLRenderer({antialias:true});
     renderer.setSize(host.clientWidth, host.clientHeight); host.appendChild(renderer.domElement);
-    geoLabelRenderer = new THREE.CSS2DRenderer(); geoLabelRenderer.setSize(host.clientWidth, host.clientHeight);
+    geoLabelRenderer = new THREE.CSS2DRenderer();
+    geoLabelRenderer.setSize(host.clientWidth, host.clientHeight);
     geoLabelRenderer.domElement.style.position = 'absolute'; geoLabelRenderer.domElement.style.top = '0';
     host.appendChild(geoLabelRenderer.domElement);
     new THREE.OrbitControls(cam, renderer.domElement);
@@ -178,13 +171,16 @@ function initGeo3D(){
     function anim(){ requestAnimationFrame(anim); renderer.render(geoScene, cam); geoLabelRenderer.render(geoScene, cam); }
     anim();
 }
+
 function onGeoImg(inp){ const f=inp.files[0]; const rd=new FileReader(); rd.onload=e=>{geoImg=e.target.result; qs('#geoPrev').src=geoImg; qs('#geoPrev').style.display='block';}; rd.readAsDataURL(f); }
+
 async function solveGeo3D(){
-    const txt = qs('#geoText').value; const out = qs('#geoOut'); initGeo3D();
+    const txt = qs('#geoText').value; const out = qs('#geoOut');
+    initGeo3D();
     while(geoGroup.children.length > 0) geoGroup.remove(geoGroup.children[0]);
     let probTxt = txt;
     if(geoImg) {
-        out.innerHTML = "正在识别图片...";
+        out.innerHTML = "正在识别...";
         const res = await callAI([{role:"user", content:[{type:"text",text:"识别题目"},{type:"image_url",image_url:{url:geoImg}}]}], true, out);
         if(res) probTxt = res; qs('#geoText').value = probTxt;
     }
@@ -213,18 +209,15 @@ async function solveGeo3D(){
             const tag = new THREE.CSS2DObject(tagDiv); tag.position.copy(vMap[p1].clone().lerp(vMap[p2],0.5)); geoGroup.add(tag);
         }
     });
-    await callAI([{role:"user", content:`解答并建立坐标系：${probTxt}`}], false, out);
+    await callAI([{role:"user", content:`解答并写出坐标：${probTxt}`}], false, out);
 }
 
-/* --- 补充缺失逻辑 --- */
-function explain(t){ callAI([{role:'user',content:'详细讲解:'+t}],false,qs('#learnOut')); }
-function bioFlow(t){ callAI([{role:'user',content:'流程拆解:'+t}],false,qs('#bioOut')); }
-function feynman(){ callAI([{role:'user',content:'费曼批改:'+qs('#feyText').value}],false,qs('#feyOut')); }
-function mnemonic(){ callAI([{role:'user',content:'口诀:'+qs('#mneIn').value}],false,qs('#mneOut')); }
+function explain(t){ callAI([{role:'user',content:'讲解:'+t}],false,qs('#learnOut')); }
 function speak(t){ speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(t.slice(0,3000)); u.lang='zh-CN'; speechSynthesis.speak(u); }
 function listen(id){ const SR=window.SpeechRecognition||window.webkitSpeechRecognition; const r=new SR(); r.lang='zh-CN'; r.onresult=e=>qs('#'+id).value=e.results[0][0].transcript; r.start(); }
-function saveCfg(){ localStorage.setItem('zk',qs('#cfgKey').value); alert('已保存'); }
+function saveCfg(){ localStorage.setItem('zk',qs('#cfgKey').value); alert('保存成功'); }
 function loadCfgUI(){ qs('#cfgKey').value=localStorage.getItem('zk')||''; }
+
 window.onload=()=>{ loadCfgUI(); if(localStorage.getItem('zk')) qs('#keyState').textContent='✅ API 已配置'; };
 </script>
 </body>
